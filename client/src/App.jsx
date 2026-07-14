@@ -7,6 +7,7 @@ import Home from "./pages/Dashboard/Home";
 import Profile from "./pages/Profile/Profile";
 import CallScreen from "./pages/Calling/CallScreen";
 import Settings from "./pages/Settings/Settings";
+import Chat from "./pages/Chat/Chat";
 
 import ProtectedRoute from "./components/Common/ProtectedRoute";
 
@@ -45,6 +46,15 @@ function App() {
           </ProtectedRoute>
         }
       />
+
+      <Route
+  path="/chat"
+  element={
+    <ProtectedRoute>
+      <Chat />
+    </ProtectedRoute>
+  }
+/>
 
       <Route
         path="/settings"
