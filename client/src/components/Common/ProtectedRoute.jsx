@@ -1,8 +1,13 @@
 import { Navigate } from "react-router-dom";
+
 import { useAuth } from "../../context/AuthContext";
+import usePresence from "../../hooks/usePresence";
 
 export default function ProtectedRoute({ children }) {
+
   const { user, loading } = useAuth();
+
+  usePresence(user);
 
   if (loading) {
     return (

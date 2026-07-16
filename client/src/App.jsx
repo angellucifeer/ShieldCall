@@ -9,64 +9,92 @@ import CallScreen from "./pages/Calling/CallScreen";
 import Settings from "./pages/Settings/Settings";
 import Chat from "./pages/Chat/Chat";
 
+import useAuth from "./hooks/useAuth";
+import useCall from "./hooks/useCall";
+
+import IncomingCall from "./components/Calling/IncomingCall";
 import ProtectedRoute from "./components/Common/ProtectedRoute";
 
 function App() {
+
+  const { user } = useAuth();
+
+  const {
+    incomingCall,
+    answer,
+    decline,
+  } = useCall(user);
+
   return (
-    <Routes>
-      <Route path="/" element={<Splash />} />
+    <>
 
-      <Route path="/login" element={<Login />} />
-
-      <Route path="/register" element={<Register />} />
-
-      <Route
-        path="/home"
-        element={
-          <ProtectedRoute>
-            <Home />
-          </ProtectedRoute>
-        }
+      <IncomingCall
+        call={incomingCall}
+        onAnswer={answer}
+        onDecline={decline}
       />
 
-      <Route
-        path="/profile"
-        element={
-          <ProtectedRoute>
-            <Profile />
-          </ProtectedRoute>
-        }
-      />
+      <Routes>
 
-      <Route
-        path="/call"
-        element={
-          <ProtectedRoute>
-            <CallScreen />
-          </ProtectedRoute>
-        }
-      />
+        <Route path="/" element={<Splash />} />
 
-      <Route
-  path="/chat"
-  element={
-    <ProtectedRoute>
-      <Chat />
-    </ProtectedRoute>
-  }
-/>
+        <Route path="/login" element={<Login />} />
 
-      <Route
-        path="/settings"
-        element={
-          <ProtectedRoute>
-            <Settings />
-          </ProtectedRoute>
-        }
-      />
+        <Route path="/register" element={<Register />} />
 
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+        <Route
+          path="/home"
+          element={
+            <ProtectedRoute>
+              <Home />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/profile"
+          element={
+            <ProtectedRoute>
+              <Profile />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/call"
+          element={
+            <ProtectedRoute>
+              <CallScreen />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/chat"
+          element={
+            <ProtectedRoute>
+              <Chat />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/settings"
+          element={
+            <ProtectedRoute>
+              <Settings />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="*"
+          element={<Navigate to="/" replace />}
+        />
+
+      </Routes>
+
+    </>
   );
 }
 

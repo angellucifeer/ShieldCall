@@ -11,22 +11,32 @@ export default function MessageBubble({
   mine,
   text,
   createdAt,
+  delivered,
   seen,
 }) {
   return (
     <div
-      className={`flex ${
+      className={`flex mb-2 ${
         mine ? "justify-end" : "justify-start"
       }`}
     >
       <div
-        className={`max-w-[75%] rounded-3xl px-4 py-3 shadow-md ${
-          mine
-            ? "bg-gradient-to-r from-blue-600 to-blue-500 text-white rounded-br-lg"
-            : "bg-zinc-800 text-white rounded-bl-lg"
-        }`}
+        className={`
+          max-w-[80%]
+          sm:max-w-[70%]
+          px-4
+          py-3
+          rounded-3xl
+          shadow-md
+          transition-all
+          ${
+            mine
+              ? "bg-gradient-to-r from-blue-600 to-cyan-600 rounded-br-md"
+              : "bg-zinc-800 rounded-bl-md"
+          }
+        `}
       >
-        <p className="break-words whitespace-pre-wrap">
+        <p className="text-white text-[15px] leading-relaxed break-words whitespace-pre-wrap">
           {text}
         </p>
 
@@ -40,10 +50,16 @@ export default function MessageBubble({
           <span>{formatTime(createdAt)}</span>
 
           {mine && (
-            <span className="text-xs">
-              {seen ? "✓✓" : "✓"}
-            </span>
-          )}
+  <span
+    className={`text-xs ${
+      seen
+        ? "text-sky-400"
+        : "text-white/80"
+    }`}
+  >
+    {delivered ? "✓✓" : "✓"}
+  </span>
+)}
         </div>
       </div>
     </div>
