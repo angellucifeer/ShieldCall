@@ -9,12 +9,18 @@ export default function CallScreen() {
   const location = useLocation();
   const { call, partner: initialPartner, isCaller } = location.state || {};
 
-  const [callStatus, setCallStatus] = useState(isCaller ? "Calling..." : "Incoming Call");
+  // Track the ground truth call status from the database row
+  const [callStatus, setCallStatus] = useState(
+    call?.status === "accepted" ? "Connected" : (isCaller ? "Calling..." : "Incoming Call")
+  );
   const [duration, setDuration] = useState(0);
   const [micEnabled, setMicEnabled] = useState(true);
   const [cameraEnabled, setCameraEnabled] = useState(true);
   const [partnerProfile, setPartnerProfile] = useState(initialPartner || null);
 
+  // -------------------------------------------------
+  // Fetch Partner Profile details if missing
+  // -------------------------------------------------
   useEffect(() => {
     async function fetchPartnerDetails() {
       if (!call) return;
@@ -41,6 +47,9 @@ export default function CallScreen() {
     }
   }, [call, isCaller, partnerProfile]);
 
+  // -------------------------------------------------
+  // Call Timer logic
+  // -------------------------------------------------
   useEffect(() => {
     if (callStatus !== "Connected") return;
 
@@ -51,10 +60,14 @@ export default function CallScreen() {
     return () => clearInterval(timer);
   }, [callStatus]);
 
+  // -------------------------------------------------
+  // Real-time updates subscription
+  // -------------------------------------------------
   useEffect(() => {
     if (!call?.id) return;
 
     const channel = subscribeCallUpdates(call.id, (updatedCall) => {
+      console.log("Realtime call update received in CallScreen:", updatedCall);
       if (updatedCall.status === "accepted") {
         setCallStatus("Connected");
       }
@@ -68,6 +81,9 @@ export default function CallScreen() {
     };
   }, [call, navigate]);
 
+  // -------------------------------------------------
+  // Action Handlers
+  // -------------------------------------------------
   async function handleAccept() {
     if (!call?.id) return;
     try {
@@ -118,6 +134,7 @@ export default function CallScreen() {
         {callStatus}
       </p>
 
+      {/* Show timer if connected */}
       {callStatus === "Connected" && (
         <p className="text-xl font-mono mt-4 bg-zinc-900 px-4 py-1.5 rounded-xl border border-zinc-800 text-cyan-400">
           {minutes}:{seconds}
@@ -136,7 +153,7 @@ export default function CallScreen() {
           {micEnabled ? <FiMic size={22} /> : <FiMicOff size={22} />}
         </button>
 
-        {callStatus === "Incoming Call" && !isCaller ? (
+        {callStatus === "Incoming Call" ? (
           <>
             <button
               onClick={handleDecline}

@@ -17,22 +17,30 @@ export default function useCall(user) {
 
     const channel = listenIncomingCalls(user.id, async (callData) => {
       console.log("Incoming call received via Supabase Realtime:", callData);
-      setIncomingCall(callData);
+      
+      // ONLY trigger incoming call overlay if the call row status is actually pending/ringing
+      if (callData && (callData.status === "ringing" || callData.status === "pending")) {
+        setIncomingCall(callData);
 
-      if (callData?.caller_id) {
-        try {
-          const { data } = await supabase
-            .from("profiles")
-            .select("display_name")
-            .eq("id", callData.caller_id)
-            .single();
+        if (callData?.caller_id) {
+          try {
+            const { data } = await supabase
+              .from("profiles")
+              .select("display_name")
+              .eq("id", callData.caller_id)
+              .single();
 
-          if (data) {
-            setCallerProfile(data);
+            if (data) {
+              setCallerProfile(data);
+            }
+          } catch (err) {
+            console.error("Error fetching caller profile details:", err);
           }
-        } catch (err) {
-          console.error("Error fetching caller profile details:", err);
         }
+      } else if (callData && (callData.status === "accepted" || callData.status === "ended" || callData.status === "declined")) {
+        // Clear out the temporary banner instantly if status changes globally
+        setIncomingCall(null);
+        setCallerProfile(null);
       }
     });
 
@@ -50,15 +58,21 @@ export default function useCall(user) {
     setError(null);
     try {
       console.log("Answering call with ID:", incomingCall.id);
-      const updatedCall = await acceptCall(incomingCall.id);
       
-      const activeCall = updatedCall || { ...incomingCall, status: "accepted" };
+      // Save reference and clear state BEFORE navigating to avoid double component rendering
+      const currentCall = incomingCall;
+      const currentProfile = callerProfile;
+      
       setIncomingCall(null);
+      setCallerProfile(null);
+
+      const updatedCall = await acceptCall(currentCall.id);
+      const activeCall = updatedCall || { ...currentCall, status: "accepted" };
 
       navigate("/call", {
         state: {
           call: activeCall,
-          partner: callerProfile || { display_name: "Kritikamukhia09" },
+          partner: currentProfile || { display_name: "Kritikamukhia09" },
           isCaller: false,
         },
       });
