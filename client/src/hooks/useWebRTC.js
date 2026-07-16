@@ -8,7 +8,6 @@ export default function useWebRTC(callId, isCaller) {
   const peerConnection = useRef(null);
   const localStreamRef = useRef(null);
 
-  // Standard public Google STUN servers for NAT traversal
   const iceServers = {
     iceServers: [
       { urls: "stun:stun.l.google.com:19302" },
@@ -19,8 +18,19 @@ export default function useWebRTC(callId, isCaller) {
   useEffect(() => {
     if (!callId) return;
 
+    let channel = null;
+
     async function initMediaAndWebRTC() {
       try {
+        // Fetch current user ID once to prevent async racing conflicts inside loop
+        const { data: { user } } = await supabase.auth.getUser();
+        const currentUserId = user?.id;
+        
+        if (!currentUserId) {
+          console.error("No authenticated user found for WebRTC signaling.");
+          return;
+        }
+
         // 1. Capture local audio and video streams
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: true,
@@ -44,15 +54,17 @@ export default function useWebRTC(callId, isCaller) {
           }
         };
 
-        // 5. Handle local ICE Candidate generation and upload them to Supabase
-        peerConnection.current.onicecandidate = async (event) => {
+        // 5. Handle local ICE Candidate generation safely without async conflicts
+        peerConnection.current.onicecandidate = (event) => {
           if (event.candidate) {
             console.log("Generated local ICE candidate:", event.candidate);
-            await supabase.from("call_signals").insert({
+            supabase.from("call_signals").insert({
               call_id: callId,
               type: "candidate",
               payload: event.candidate.toJSON(),
-              sender_id: (await supabase.auth.getUser()).data.user?.id,
+              sender_id: currentUserId,
+            }).then(({ error }) => {
+              if (error) console.error("Error inserting ICE candidate:", error);
             });
           }
         };
@@ -63,66 +75,59 @@ export default function useWebRTC(callId, isCaller) {
           await peerConnection.current.setLocalDescription(offer);
           
           console.log("Caller sending SDP Offer...");
-          await supabase.from("call_signals").insert({
+          const { error } = await supabase.from("call_signals").insert({
             call_id: callId,
             type: "offer",
             payload: offer,
-            sender_id: (await supabase.auth.getUser()).data.user?.id,
+            sender_id: currentUserId,
           });
+          if (error) console.error("Error sending offer:", error);
         }
 
         // 7. Subscribe to real-time signaling exchanges from the database
-        subscribeToSignalingChannel();
+        channel = supabase
+          .channel(`signaling:${callId}`)
+          .on(
+            "postgres_changes",
+            { event: "INSERT", schema: "public", table: "call_signals", filter: `call_id=eq.${callId}` },
+            async (payload) => {
+              const newSignal = payload.new;
+
+              // Ignore signals sent by yourself
+              if (newSignal.sender_id === currentUserId) return;
+
+              console.log(`Received WebRTC Signal (${newSignal.type}):`, newSignal);
+
+              try {
+                if (newSignal.type === "offer" && !isCaller) {
+                  // Receiver handling the offer
+                  await peerConnection.current.setRemoteDescription(new RTCSessionDescription(newSignal.payload));
+                  const answer = await peerConnection.current.createAnswer();
+                  await peerConnection.current.setLocalDescription(answer);
+
+                  await supabase.from("call_signals").insert({
+                    call_id: callId,
+                    type: "answer",
+                    payload: answer,
+                    sender_id: currentUserId,
+                  });
+                } else if (newSignal.type === "answer" && isCaller) {
+                  // Caller handling the answer
+                  await peerConnection.current.setRemoteDescription(new RTCSessionDescription(newSignal.payload));
+                } else if (newSignal.type === "candidate") {
+                  // Add trickle ICE candidate to connection
+                  await peerConnection.current.addIceCandidate(new RTCIceCandidate(newSignal.payload));
+                }
+              } catch (err) {
+                console.error("Error processing incoming signaling data:", err);
+              }
+            }
+          )
+          .subscribe();
 
       } catch (err) {
         console.error("Failed to initialize WebRTC streams:", err);
       }
-    }
-
-    // Subscribe to incoming database signals (Offers, Answers, and Candidates)
-    function subscribeToSignalingChannel() {
-      const channel = supabase
-        .channel(`signaling:${callId}`)
-        .on(
-          "postgres_changes",
-          { event: "INSERT", schema: "public", table: "call_signals", filter: `call_id=eq.${callId}` },
-          async (payload) => {
-            const currentUserId = (await supabase.auth.getUser()).data.user?.id;
-            const newSignal = payload.new;
-
-            // Ignore signals sent by yourself
-            if (newSignal.sender_id === currentUserId) return;
-
-            console.log(`Received WebRTC Signal (${newSignal.type}):`, newSignal);
-
-            try {
-              if (newSignal.type === "offer" && !isCaller) {
-                // Receiver handling the offer
-                await peerConnection.current.setRemoteDescription(new RTCSessionDescription(newSignal.payload));
-                const answer = await peerConnection.current.createAnswer();
-                await peerConnection.current.setLocalDescription(answer);
-
-                await supabase.from("call_signals").insert({
-                  call_id: callId,
-                  type: "answer",
-                  payload: answer,
-                  sender_id: currentUserId,
-                });
-              } else if (newSignal.type === "answer" && isCaller) {
-                // Caller handling the answer
-                await peerConnection.current.setRemoteDescription(new RTCSessionDescription(newSignal.payload));
-              } else if (newSignal.type === "candidate") {
-                // Add trickle ICE candidate to connection
-                await peerConnection.current.addIceCandidate(new RTCIceCandidate(newSignal.payload));
-              }
-            } catch (err) {
-              console.error("Error processing incoming signaling data:", err);
-            }
-          }
-        )
-        .subscribe();
-
-      return channel;
     }
 
     initMediaAndWebRTC();
@@ -135,7 +140,9 @@ export default function useWebRTC(callId, isCaller) {
       if (peerConnection.current) {
         peerConnection.current.close();
       }
-      supabase.channel(`signaling:${callId}`).unsubscribe();
+      if (channel) {
+        supabase.channel(`signaling:${callId}`).unsubscribe();
+      }
     };
   }, [callId, isCaller]);
 
