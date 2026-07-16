@@ -1,5 +1,5 @@
 import { Routes, Route, Navigate } from "react-router-dom";
-
+import { useLocation } from "react-router-dom";
 import Splash from "./pages/Splash/Splash";
 import Login from "./pages/Auth/Login";
 import Register from "./pages/Auth/Register";
@@ -16,7 +16,7 @@ import IncomingCall from "./components/Calling/IncomingCall";
 import ProtectedRoute from "./components/Common/ProtectedRoute";
 
 function App() {
-
+const location = useLocation();
   const { user } = useAuth();
 
   const {
@@ -28,11 +28,13 @@ function App() {
   return (
     <>
 
-      <IncomingCall
+      {location.pathname !== "/call" && (
+    <IncomingCall
         call={incomingCall}
         onAnswer={answer}
         onDecline={decline}
-      />
+    />
+)}
 
       <Routes>
 

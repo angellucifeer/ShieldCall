@@ -12,6 +12,11 @@ export default function CallScreen() {
 
   // Keep track of the live call object to monitor type upgrades (audio -> video)
   const [currentCall, setCurrentCall] = useState(initialCall);
+  useEffect(() => {
+  if (initialCall) {
+    setCurrentCall(initialCall);
+  }
+}, [initialCall]);
 
   const callStatus = currentCall?.status;
 
@@ -100,12 +105,20 @@ const isEnded =
   useEffect(() => {
     if (!isConnected) return;
 
-    const timer = setInterval(() => {
-      setDuration((t) => t + 1);
-    }, 1000);
+    const answeredAt = new Date(currentCall.answered_at).getTime();
 
-    return () => clearInterval(timer);
-  }, [callStatus]);
+    const updateTimer = () => {
+        const now = Date.now();
+        setDuration(Math.floor((now - answeredAt) / 1000));
+    };
+
+    updateTimer();
+
+    const interval = setInterval(updateTimer, 1000);
+
+    return () => clearInterval(interval);
+
+}, [isConnected, currentCall?.answered_at]);
 
   // Subscribe to real-time database updates for changes
   useEffect(() => {
@@ -131,7 +144,9 @@ const isEnded =
   async function handleAccept() {
     if (!currentCall?.id) return;
     try {  // Set instantly to clear UI blocking states
-      await acceptCall(currentCall.id);
+      const updated = await acceptCall(currentCall.id);
+
+setCurrentCall(updated);
     } catch (err) {
       console.error("Error accepting call:", err);
     }
@@ -206,9 +221,13 @@ const isEnded =
           </div>
           <h1 className="text-3xl font-bold mt-8 tracking-wide">{partnerName}</h1>
           <p className="text-zinc-400 mt-2 font-medium tracking-wider text-sm bg-zinc-900/50 px-3 py-1 rounded-full border border-zinc-800">
-            {callStatus}
-          </p>
-          {callStatus === "Connected" && (
+    {isConnected
+        ? "Connected"
+        : isRinging
+        ? "Calling..."
+        : callStatus}
+</p>
+          {isConnected && (
             <p className="text-xl font-mono mt-4 bg-zinc-900 px-4 py-1.5 rounded-xl border border-zinc-800 text-cyan-400">
               {minutes}:{seconds}
             </p>
@@ -230,7 +249,7 @@ const isEnded =
       )}
 
       {/* 3. Operational Overlay Tag */}
-      {callStatus === "Connected" && isVideoCall && (
+      {isConnected && isVideoCall && (
         <div className="absolute top-6 left-6 z-20 bg-zinc-950/70 backdrop-blur-md px-4 py-2 rounded-2xl border border-zinc-800 flex flex-col gap-0.5">
           <p className="font-semibold tracking-wide">{partnerName}</p>
           <p className="text-xs font-mono text-cyan-400">{minutes}:{seconds}</p>
@@ -280,12 +299,12 @@ const isEnded =
         {/* Dynamic Upgrade Mode Switcher Button */}
         <button
           onClick={toggleCallType}
-          disabled={callStatus !== "Connected"}
+          disabled={!isConnected}
           className={`w-14 h-14 rounded-full flex items-center justify-center border transition-all duration-200 ${
             isVideoCall 
               ? "bg-cyan-600 border-cyan-500 hover:bg-cyan-700 text-white shadow-md shadow-cyan-500/20" 
               : "bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-zinc-400 hover:text-white"
-          } ${callStatus !== "Connected" ? "opacity-40 cursor-not-allowed" : ""}`}
+          } ${!isConnected ? "opacity-40 cursor-not-allowed" : ""}`}
           title={isVideoCall ? "Switch to Audio Call" : "Switch to Video Call"}
         >
           {isVideoCall ? <FiVideo size={22} /> : <FiVideoOff size={22} />}

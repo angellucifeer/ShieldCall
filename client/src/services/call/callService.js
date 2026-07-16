@@ -38,14 +38,16 @@ export function listenIncomingCalls(
   channel.on(
     "postgres_changes",
     {
-      event: "INSERT",
+      event: "*",
       schema: "public",
       table: "call_invites",
       filter: `receiver_id=eq.${userId}`,
     },
     (payload) => {
 
-      callback(payload.new);
+      if (payload.eventType === "DELETE") return;
+
+callback(payload.new);
 
     }
   );
