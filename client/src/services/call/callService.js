@@ -60,19 +60,19 @@ export function listenIncomingCalls(
 
 export async function acceptCall(callId) {
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("call_invites")
     .update({
-
       status: "accepted",
-
       answered_at: new Date().toISOString(),
-
     })
-    .eq("id", callId);
+    .eq("id", callId)
+    .select()
+    .single();
 
   if (error) throw error;
 
+  return data;
 }
 // ==========================================
 // Decline Call
@@ -80,19 +80,19 @@ export async function acceptCall(callId) {
 
 export async function declineCall(callId) {
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("call_invites")
     .update({
-
       status: "declined",
-
       ended_at: new Date().toISOString(),
-
     })
-    .eq("id", callId);
+    .eq("id", callId)
+    .select()
+    .single();
 
   if (error) throw error;
 
+  return data;
 }
 
 // ==========================================
@@ -101,19 +101,19 @@ export async function declineCall(callId) {
 
 export async function endCall(callId) {
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("call_invites")
     .update({
-
       status: "ended",
-
       ended_at: new Date().toISOString(),
-
     })
-    .eq("id", callId);
+    .eq("id", callId)
+    .select()
+    .single();
 
   if (error) throw error;
 
+  return data;
 }
 
 // ==========================================

@@ -12,13 +12,20 @@ export default function CallScreen() {
 
   // Keep track of the live call object to monitor type upgrades (audio -> video)
   const [currentCall, setCurrentCall] = useState(initialCall);
+
+  const callStatus = currentCall?.status;
+
+const isConnected = callStatus === "accepted";
+
+const isRinging = callStatus === "ringing";
+
+const isEnded =
+  callStatus === "ended" ||
+  callStatus === "declined";
   
   // Explicitly check for video types
   const isVideoCall = currentCall?.type === "video" || currentCall?.call_type === "video";
 
-  const [callStatus, setCallStatus] = useState(
-    initialCall?.status === "accepted" ? "Connected" : (isCaller ? "Calling..." : "Incoming Call")
-  );
   
   const [duration, setDuration] = useState(0);
   const [micEnabled, setMicEnabled] = useState(true);
@@ -91,7 +98,7 @@ export default function CallScreen() {
 
   // Timer configuration
   useEffect(() => {
-    if (callStatus !== "Connected") return;
+    if (!isConnected) return;
 
     const timer = setInterval(() => {
       setDuration((t) => t + 1);
@@ -108,12 +115,12 @@ export default function CallScreen() {
       console.log("Realtime call row update:", updatedCall);
       setCurrentCall(updatedCall);
       
-      if (updatedCall.status === "accepted") {
-        setCallStatus("Connected");
-      }
-      if (updatedCall.status === "declined" || updatedCall.status === "ended") {
-        navigate("/chat");
-      }
+      if (
+    updatedCall.status === "ended" ||
+    updatedCall.status === "declined"
+) {
+    navigate("/chat");
+}
     });
 
     return () => {
@@ -123,8 +130,7 @@ export default function CallScreen() {
 
   async function handleAccept() {
     if (!currentCall?.id) return;
-    try {
-      setCallStatus("Connected"); // Set instantly to clear UI blocking states
+    try {  // Set instantly to clear UI blocking states
       await acceptCall(currentCall.id);
     } catch (err) {
       console.error("Error accepting call:", err);
@@ -177,13 +183,15 @@ export default function CallScreen() {
   const avatarLetter = partnerName.charAt(0).toUpperCase();
 
   // Strict local control checking for incoming screens
-  const isIncomingCallPending = callStatus === "Incoming Call" && !isCaller;
+  const isIncomingCallPending =
+  !isCaller &&
+  isRinging;
 
   return (
     <div className="relative h-screen bg-zinc-950 text-white flex flex-col items-center justify-center overflow-hidden">
       
       {/* 1. Remote Viewport Media Player */}
-      {isVideoCall && callStatus === "Connected" && remoteStream ? (
+      {isVideoCall && isConnected && remoteStream ? (
         <video
           ref={remoteVideoRef}
           autoPlay
