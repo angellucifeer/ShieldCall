@@ -2,18 +2,45 @@ import { useEffect, useState } from "react";
 import { FiPhoneOff, FiMic, FiMicOff, FiVideo, FiVideoOff, FiPhone } from "react-icons/fi";
 import { useLocation, useNavigate } from "react-router-dom";
 import { endCall, acceptCall, declineCall, subscribeCallUpdates } from "../../services/call/callService";
+import { supabase } from "../../services/supabaseClient";
 
 export default function CallScreen() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { call, partner, isCaller } = location.state || {};
+  const { call, partner: initialPartner, isCaller } = location.state || {};
 
   const [callStatus, setCallStatus] = useState(isCaller ? "Calling..." : "Incoming Call");
   const [duration, setDuration] = useState(0);
   const [micEnabled, setMicEnabled] = useState(true);
   const [cameraEnabled, setCameraEnabled] = useState(true);
+  const [partnerProfile, setPartnerProfile] = useState(initialPartner || null);
 
-  // Call Timer logic
+  useEffect(() => {
+    async function fetchPartnerDetails() {
+      if (!call) return;
+      const targetUserId = isCaller ? call.receiver_id : call.caller_id;
+      if (!targetUserId) return;
+
+      try {
+        const { data } = await supabase
+          .from("profiles")
+          .select("display_name")
+          .eq("id", targetUserId)
+          .single();
+
+        if (data) {
+          setPartnerProfile(data);
+        }
+      } catch (err) {
+        console.error("Error fetching partner details on call screen:", err);
+      }
+    }
+
+    if (!partnerProfile) {
+      fetchPartnerDetails();
+    }
+  }, [call, isCaller, partnerProfile]);
+
   useEffect(() => {
     if (callStatus !== "Connected") return;
 
@@ -24,7 +51,6 @@ export default function CallScreen() {
     return () => clearInterval(timer);
   }, [callStatus]);
 
-  // Real-time updates subscription
   useEffect(() => {
     if (!call?.id) return;
 
@@ -75,18 +101,15 @@ export default function CallScreen() {
   const minutes = String(Math.floor(duration / 60)).padStart(2, "0");
   const seconds = String(duration % 60).padStart(2, "0");
 
-  // Format avatar initials safely
-  const partnerName = partner?.display_name || "Unknown";
+  const partnerName = partnerProfile?.display_name || "Kritikamukhia09";
   const avatarLetter = partnerName.charAt(0).toUpperCase();
 
   return (
     <div className="h-screen bg-zinc-950 text-white flex flex-col items-center justify-center p-4">
-      {/* Dynamic Avatar Initials */}
       <div className="w-40 h-40 rounded-full bg-gradient-to-br from-blue-600 to-cyan-500 flex items-center justify-center text-5xl font-bold shadow-xl">
         {avatarLetter}
       </div>
 
-      {/* Dynamic Display Name */}
       <h1 className="text-3xl font-bold mt-8 tracking-wide">
         {partnerName}
       </h1>
@@ -95,14 +118,12 @@ export default function CallScreen() {
         {callStatus}
       </p>
 
-      {/* Connected Timer */}
       {callStatus === "Connected" && (
         <p className="text-xl font-mono mt-4 bg-zinc-900 px-4 py-1.5 rounded-xl border border-zinc-800 text-cyan-400">
           {minutes}:{seconds}
         </p>
       )}
 
-      {/* Control Actions Panel */}
       <div className="flex items-center gap-6 mt-16">
         <button
           onClick={() => setMicEnabled(!micEnabled)}

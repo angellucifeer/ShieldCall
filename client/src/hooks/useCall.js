@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { listenIncomingCalls, acceptCall, declineCall } from "../services/call/callService";
-import { supabase } from "../services/supabaseClient"; // Ensure this matches your project's client import path
+import { supabase } from "../services/supabaseClient";
 
 export default function useCall(user) {
   const navigate = useNavigate();
@@ -19,10 +19,9 @@ export default function useCall(user) {
       console.log("Incoming call received via Supabase Realtime:", callData);
       setIncomingCall(callData);
 
-      // Fetch the caller's real profile name from the database
       if (callData?.caller_id) {
         try {
-          const { data, error } = await supabase
+          const { data } = await supabase
             .from("profiles")
             .select("display_name")
             .eq("id", callData.caller_id)
@@ -56,11 +55,10 @@ export default function useCall(user) {
       const activeCall = updatedCall || { ...incomingCall, status: "accepted" };
       setIncomingCall(null);
 
-      // Route receiver to Call Screen with the fetched caller information
       navigate("/call", {
         state: {
           call: activeCall,
-          partner: callerProfile || { display_name: "Caller" },
+          partner: callerProfile || { display_name: "Kritikamukhia09" },
           isCaller: false,
         },
       });
