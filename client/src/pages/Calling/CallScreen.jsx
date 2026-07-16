@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { FiPhoneOff, FiMic, FiMicOff, FiVideo, FiVideoOff, FiPhone } from "react-icons/fi";
 import { useLocation, useNavigate } from "react-router-dom";
 import { endCall, acceptCall, declineCall, subscribeCallUpdates } from "../../services/call/callService";
-import { supabase } from "../../services/supabaseClient";
+import { supabase } from "../../services/supabase";
 
 export default function CallScreen() {
   const navigate = useNavigate();

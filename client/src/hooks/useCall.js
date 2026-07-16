@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { listenIncomingCalls, acceptCall, declineCall } from "../services/call/callService";
-import { supabase } from "../services/supabaseClient"; 
+import { supabase } from "../services/supabase"; 
 
 export default function useCall(user) {
   const navigate = useNavigate();
