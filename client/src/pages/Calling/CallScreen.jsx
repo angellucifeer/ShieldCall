@@ -8,15 +8,12 @@ export default function CallScreen() {
   const location = useLocation();
   const { call, partner, isCaller } = location.state || {};
 
-  // Setup initial status based on whether you are the caller or receiver
   const [callStatus, setCallStatus] = useState(isCaller ? "Calling..." : "Incoming Call");
   const [duration, setDuration] = useState(0);
   const [micEnabled, setMicEnabled] = useState(true);
   const [cameraEnabled, setCameraEnabled] = useState(true);
 
-  // -------------------------------------------------
-  // Call Timer (Only increments when active/connected)
-  // -------------------------------------------------
+  // Call Timer logic
   useEffect(() => {
     if (callStatus !== "Connected") return;
 
@@ -27,9 +24,7 @@ export default function CallScreen() {
     return () => clearInterval(timer);
   }, [callStatus]);
 
-  // -------------------------------------------------
-  // Listen for Live Real-Time Updates (Ringing -> Connected -> Ended)
-  // -------------------------------------------------
+  // Real-time updates subscription
   useEffect(() => {
     if (!call?.id) return;
 
@@ -47,9 +42,6 @@ export default function CallScreen() {
     };
   }, [call, navigate]);
 
-  // -------------------------------------------------
-  // Action Handlers
-  // -------------------------------------------------
   async function handleAccept() {
     if (!call?.id) return;
     try {
@@ -80,34 +72,37 @@ export default function CallScreen() {
     }
   }
 
-  // Formatting helper for duration display (MM:SS)
   const minutes = String(Math.floor(duration / 60)).padStart(2, "0");
   const seconds = String(duration % 60).padStart(2, "0");
 
+  // Format avatar initials safely
+  const partnerName = partner?.display_name || "Unknown";
+  const avatarLetter = partnerName.charAt(0).toUpperCase();
+
   return (
     <div className="h-screen bg-zinc-950 text-white flex flex-col items-center justify-center p-4">
-      {/* Avatar Representation */}
+      {/* Dynamic Avatar Initials */}
       <div className="w-40 h-40 rounded-full bg-gradient-to-br from-blue-600 to-cyan-500 flex items-center justify-center text-5xl font-bold shadow-xl">
-        {partner?.display_name?.charAt(0).toUpperCase() || "P"}
+        {avatarLetter}
       </div>
 
-      {/* User Information */}
+      {/* Dynamic Display Name */}
       <h1 className="text-3xl font-bold mt-8 tracking-wide">
-        {partner?.display_name || "Partner"}
+        {partnerName}
       </h1>
       
       <p className="text-zinc-400 mt-2 font-medium tracking-wider text-sm bg-zinc-900/50 px-3 py-1 rounded-full border border-zinc-800">
         {callStatus}
       </p>
 
-      {/* Conditional Timer Display */}
+      {/* Connected Timer */}
       {callStatus === "Connected" && (
         <p className="text-xl font-mono mt-4 bg-zinc-900 px-4 py-1.5 rounded-xl border border-zinc-800 text-cyan-400">
           {minutes}:{seconds}
         </p>
       )}
 
-      {/* Interactive Control Controls */}
+      {/* Control Actions Panel */}
       <div className="flex items-center gap-6 mt-16">
         <button
           onClick={() => setMicEnabled(!micEnabled)}
@@ -120,7 +115,6 @@ export default function CallScreen() {
           {micEnabled ? <FiMic size={22} /> : <FiMicOff size={22} />}
         </button>
 
-        {/* Dynamic Action Controls: Decline / Accept vs. End */}
         {callStatus === "Incoming Call" && !isCaller ? (
           <>
             <button

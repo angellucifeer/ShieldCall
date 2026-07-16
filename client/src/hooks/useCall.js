@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { listenIncomingCalls, acceptCall, declineCall } from "../services/call/callService";
+import { supabase } from "../services/supabaseClient"; // Ensure this matches your project's client import path
 
 export default function useCall(user) {
   const navigate = useNavigate();
   const [incomingCall, setIncomingCall] = useState(null);
+  const [callerProfile, setCallerProfile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -13,10 +15,26 @@ export default function useCall(user) {
 
     console.log("Subscribing to global incoming call channel for user:", user.id);
 
-    // Listen for live database call rows targeting this user
-    const channel = listenIncomingCalls(user.id, (callData) => {
+    const channel = listenIncomingCalls(user.id, async (callData) => {
       console.log("Incoming call received via Supabase Realtime:", callData);
       setIncomingCall(callData);
+
+      // Fetch the caller's real profile name from the database
+      if (callData?.caller_id) {
+        try {
+          const { data, error } = await supabase
+            .from("profiles")
+            .select("display_name")
+            .eq("id", callData.caller_id)
+            .single();
+
+          if (data) {
+            setCallerProfile(data);
+          }
+        } catch (err) {
+          console.error("Error fetching caller profile details:", err);
+        }
+      }
     });
 
     return () => {
@@ -27,7 +45,6 @@ export default function useCall(user) {
     };
   }, [user]);
 
-  // Answer sequence for the receiver
   async function answer() {
     if (!incomingCall) return;
     setLoading(true);
@@ -39,10 +56,11 @@ export default function useCall(user) {
       const activeCall = updatedCall || { ...incomingCall, status: "accepted" };
       setIncomingCall(null);
 
-      // Route the receiver instantly to the Call Screen with state
+      // Route receiver to Call Screen with the fetched caller information
       navigate("/call", {
         state: {
           call: activeCall,
+          partner: callerProfile || { display_name: "Caller" },
           isCaller: false,
         },
       });
@@ -54,7 +72,6 @@ export default function useCall(user) {
     }
   }
 
-  // Decline sequence for the receiver
   async function decline() {
     if (!incomingCall) return;
     setLoading(true);
@@ -63,6 +80,7 @@ export default function useCall(user) {
       console.log("Declining call with ID:", incomingCall.id);
       await declineCall(incomingCall.id);
       setIncomingCall(null);
+      setCallerProfile(null);
     } catch (err) {
       console.error("Failed to decline call:", err);
       setError(err.message || "Failed to decline call");
