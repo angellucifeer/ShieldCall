@@ -1,101 +1,57 @@
-import { useEffect, useState } from "react";
-
-import {
-  listenIncomingCalls,
-  acceptCall,
-  declineCall,
-  endCall,
-} from "../services/call/callService";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { listenIncomingCalls, acceptCall, declineCall } from "../services/call/callService";
 
 export default function useCall(user) {
-
+  const navigate = useNavigate();
   const [incomingCall, setIncomingCall] = useState(null);
 
   useEffect(() => {
+    if (!user?.id) return;
 
-    if (!user) return;
-
-    const channel = listenIncomingCalls(
-
-      user.id,
-
-      (call) => {
-
-        console.log(
-          "Incoming Call:",
-          call
-        );
-
-        setIncomingCall(call);
-
-      }
-
-    );
+    // Listen for live database call rows targeting this user
+    const channel = listenIncomingCalls(user.id, (callData) => {
+      setIncomingCall(callData);
+    });
 
     return () => {
-
-      channel.unsubscribe();
-
+      if (channel) channel.unsubscribe();
     };
-
   }, [user]);
 
-  //--------------------------------------------------
-  // Accept
-  //--------------------------------------------------
-
   async function answer() {
-
     if (!incomingCall) return;
+    try {
+      await acceptCall(incomingCall.id);
+      
+      const activeCall = { ...incomingCall, status: "accepted" };
+      setIncomingCall(null);
 
-    await acceptCall(
-      incomingCall.id
-    );
-
+      // Route the receiver instantly to the Call Screen
+      navigate("/call", {
+        state: {
+          call: activeCall,
+          isCaller: false,
+        },
+      });
+    } catch (err) {
+      console.error("Failed to answer call:", err);
+    }
   }
-
-  //--------------------------------------------------
-  // Decline
-  //--------------------------------------------------
 
   async function decline() {
-
     if (!incomingCall) return;
-
-    await declineCall(
-      incomingCall.id
-    );
-
-    setIncomingCall(null);
-
-  }
-
-  //--------------------------------------------------
-  // End
-  //--------------------------------------------------
-
-  async function end() {
-
-    if (!incomingCall) return;
-
-    await endCall(
-      incomingCall.id
-    );
-
-    setIncomingCall(null);
-
+    try {
+      await declineCall(incomingCall.id);
+      setIncomingCall(null);
+    } catch (err) {
+      console.error("Failed to decline call:", err);
+    }
   }
 
   return {
-
     incomingCall,
-
     answer,
-
     decline,
-
-    end,
-
   };
-
 }
