@@ -1,15 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { FiPhoneOff, FiMic, FiMicOff, FiVideo, FiVideoOff, FiPhone } from "react-icons/fi";
 import { useLocation, useNavigate } from "react-router-dom";
 import { endCall, acceptCall, declineCall, subscribeCallUpdates } from "../../services/call/callService";
 import { supabase } from "../../services/supabase";
+import useWebRTC from "../../hooks/useWebRTC";
 
 export default function CallScreen() {
   const navigate = useNavigate();
   const location = useLocation();
   const { call, partner: initialPartner, isCaller } = location.state || {};
 
-  // Track the ground truth call status from the database row
   const [callStatus, setCallStatus] = useState(
     call?.status === "accepted" ? "Connected" : (isCaller ? "Calling..." : "Incoming Call")
   );
@@ -18,9 +18,40 @@ export default function CallScreen() {
   const [cameraEnabled, setCameraEnabled] = useState(true);
   const [partnerProfile, setPartnerProfile] = useState(initialPartner || null);
 
-  // -------------------------------------------------
-  // Fetch Partner Profile details if missing
-  // -------------------------------------------------
+  // Initialize WebRTC hook to manage network routing and media elements
+  const { localStream, remoteStream } = useWebRTC(call?.id, isCaller);
+
+  const localVideoRef = useRef(null);
+  const remoteVideoRef = useRef(null);
+
+  // Bind local camera stream to the local preview viewport
+  useEffect(() => {
+    if (localVideoRef.current && localStream) {
+      localVideoRef.current.srcObject = localStream;
+    }
+  }, [localStream]);
+
+  // Bind remote network stream to the main background viewport
+  useEffect(() => {
+    if (remoteVideoRef.current && remoteStream) {
+      remoteVideoRef.current.srcObject = remoteStream;
+    }
+  }, [remoteStream]);
+
+  // Handle hardware muting / toggling tracking
+  useEffect(() => {
+    if (localStream) {
+      localStream.getAudioTracks().forEach(track => track.enabled = micEnabled);
+    }
+  }, [micEnabled, localStream]);
+
+  useEffect(() => {
+    if (localStream) {
+      localStream.getVideoTracks().forEach(track => track.enabled = cameraEnabled);
+    }
+  }, [cameraEnabled, localStream]);
+
+  // Fetch partner display name metadata if missing from history object
   useEffect(() => {
     async function fetchPartnerDetails() {
       if (!call) return;
@@ -47,9 +78,7 @@ export default function CallScreen() {
     }
   }, [call, isCaller, partnerProfile]);
 
-  // -------------------------------------------------
-  // Call Timer logic
-  // -------------------------------------------------
+  // Track operational connection duration timer
   useEffect(() => {
     if (callStatus !== "Connected") return;
 
@@ -60,14 +89,11 @@ export default function CallScreen() {
     return () => clearInterval(timer);
   }, [callStatus]);
 
-  // -------------------------------------------------
-  // Real-time updates subscription
-  // -------------------------------------------------
+  // Subscribe to external real-time call states
   useEffect(() => {
     if (!call?.id) return;
 
     const channel = subscribeCallUpdates(call.id, (updatedCall) => {
-      console.log("Realtime call update received in CallScreen:", updatedCall);
       if (updatedCall.status === "accepted") {
         setCallStatus("Connected");
       }
@@ -81,9 +107,6 @@ export default function CallScreen() {
     };
   }, [call, navigate]);
 
-  // -------------------------------------------------
-  // Action Handlers
-  // -------------------------------------------------
   async function handleAccept() {
     if (!call?.id) return;
     try {
@@ -121,27 +144,57 @@ export default function CallScreen() {
   const avatarLetter = partnerName.charAt(0).toUpperCase();
 
   return (
-    <div className="h-screen bg-zinc-950 text-white flex flex-col items-center justify-center p-4">
-      <div className="w-40 h-40 rounded-full bg-gradient-to-br from-blue-600 to-cyan-500 flex items-center justify-center text-5xl font-bold shadow-xl">
-        {avatarLetter}
-      </div>
-
-      <h1 className="text-3xl font-bold mt-8 tracking-wide">
-        {partnerName}
-      </h1>
+    <div className="relative h-screen bg-zinc-950 text-white flex flex-col items-center justify-center overflow-hidden">
       
-      <p className="text-zinc-400 mt-2 font-medium tracking-wider text-sm bg-zinc-900/50 px-3 py-1 rounded-full border border-zinc-800">
-        {callStatus}
-      </p>
-
-      {/* Show timer if connected */}
-      {callStatus === "Connected" && (
-        <p className="text-xl font-mono mt-4 bg-zinc-900 px-4 py-1.5 rounded-xl border border-zinc-800 text-cyan-400">
-          {minutes}:{seconds}
-        </p>
+      {/* 1. Fullscreen Remote Feed Viewport */}
+      {callStatus === "Connected" && remoteStream ? (
+        <video
+          ref={remoteVideoRef}
+          autoPlay
+          playsInline
+          className="absolute inset-0 w-full h-full object-cover z-0"
+        />
+      ) : (
+        /* Standby Avatar UI Container */
+        <div className="flex flex-col items-center z-10">
+          <div className="w-40 h-40 rounded-full bg-gradient-to-br from-blue-600 to-cyan-500 flex items-center justify-center text-5xl font-bold shadow-xl">
+            {avatarLetter}
+          </div>
+          <h1 className="text-3xl font-bold mt-8 tracking-wide">{partnerName}</h1>
+          <p className="text-zinc-400 mt-2 font-medium tracking-wider text-sm bg-zinc-900/50 px-3 py-1 rounded-full border border-zinc-800">
+            {callStatus}
+          </p>
+          {callStatus === "Connected" && (
+            <p className="text-xl font-mono mt-4 bg-zinc-900 px-4 py-1.5 rounded-xl border border-zinc-800 text-cyan-400">
+              {minutes}:{seconds}
+            </p>
+          )}
+        </div>
       )}
 
-      <div className="flex items-center gap-6 mt-16">
+      {/* 2. Mini Floating Self-View Container */}
+      {localStream && cameraEnabled && (
+        <div className="absolute top-6 right-6 w-32 h-48 md:w-40 md:h-56 rounded-2xl overflow-hidden border-2 border-zinc-800 shadow-2xl z-20 bg-zinc-900">
+          <video
+            ref={localVideoRef}
+            autoPlay
+            playsInline
+            muted // Always loop muted locally to block loopback echo
+            className="w-full h-full object-cover scale-x-[-1]" // Naturally mirrors display
+          />
+        </div>
+      )}
+
+      {/* 3. Dynamic Video Caller Header Card */}
+      {callStatus === "Connected" && remoteStream && (
+        <div className="absolute top-6 left-6 z-20 bg-zinc-950/70 backdrop-blur-md px-4 py-2 rounded-2xl border border-zinc-800 flex flex-col gap-0.5">
+          <p className="font-semibold tracking-wide">{partnerName}</p>
+          <p className="text-xs font-mono text-cyan-400">{minutes}:{seconds}</p>
+        </div>
+      )}
+
+      {/* 4. Navigation Control Action Center */}
+      <div className="absolute bottom-10 left-1/2 transform -translate-x-1/2 flex items-center gap-6 z-30 bg-zinc-900/40 backdrop-blur-lg px-6 py-4 rounded-3xl border border-zinc-800/50 shadow-2xl">
         <button
           onClick={() => setMicEnabled(!micEnabled)}
           className={`w-14 h-14 rounded-full flex items-center justify-center border transition-all duration-200 ${
