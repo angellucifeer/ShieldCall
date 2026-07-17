@@ -7,4 +7,12 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
+  build: {
+    // Forces the compiler to skip hanging processes by using standard esbuild minification
+    minify: 'esbuild',
+    cssMinify: true,
+    // Prevents bundling pipelines from freezing on warnings or infinite file loops
+    reportCompressedSize: false,
+    chunkSizeWarningLimit: 1000,
+  }
 })
