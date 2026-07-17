@@ -10,29 +10,19 @@ export default function CallScreen() {
   const location = useLocation();
   const { call: initialCall, partner: initialPartner, isCaller } = location.state || {};
 
-  // Keep track of the live call object to monitor type upgrades (audio -> video)
   const [currentCall, setCurrentCall] = useState(initialCall);
   useEffect(() => {
-  if (initialCall) {
-    setCurrentCall(initialCall);
-  }
-}, [initialCall]);
+    if (initialCall) {
+      setCurrentCall(initialCall);
+    }
+  }, [initialCall]);
 
   const callStatus = currentCall?.status;
-  console.log("Current Call Status:", callStatus);
-
-const isConnected = callStatus === "accepted";
-
-const isRinging = callStatus === "ringing";
-
-const isEnded =
-  callStatus === "ended" ||
-  callStatus === "declined";
+  const isConnected = callStatus === "accepted" || callStatus === "Connected";
+  const isRinging = callStatus === "ringing";
   
-  // Explicitly check for video types
   const isVideoCall = currentCall?.type === "video" || currentCall?.call_type === "video";
 
-  
   const [duration, setDuration] = useState(0);
   const [micEnabled, setMicEnabled] = useState(true);
   const [cameraEnabled, setCameraEnabled] = useState(isVideoCall);
@@ -40,44 +30,52 @@ const isEnded =
   const [myId, setMyId] = useState(null);
 
   useEffect(() => {
-  async function getCurrentUser() {
-    const { data } = await supabase.auth.getUser();
-    setMyId(data.user?.id);
-  }
+    async function getCurrentUser() {
+      const { data } = await supabase.auth.getUser();
+      setMyId(data.user?.id);
+    }
+    getCurrentUser();
+  }, []);
 
-  getCurrentUser();
-}, []);
-
-console.log("CallScreen");
-console.log("callId:", currentCall?.id);
-console.log("isCaller:", isCaller);
-console.log("isVideoCall:", isVideoCall);
-console.log("status =", currentCall?.status);
-  // Initialize WebRTC hook
-const { localStream, remoteStream } =
-    useWebRTC(
-        currentCall?.id,
-        isCaller,
-        isVideoCall,
-        currentCall?.status
-    );
+  const { localStream, remoteStream } = useWebRTC(
+    currentCall?.id,
+    isCaller,
+    isVideoCall,
+    currentCall?.status
+  );
+  
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
+  const audioPlaybackRef = useRef(null);
 
-  // Bind video element streams
+  // Bind local video element tracks
   useEffect(() => {
     if (localVideoRef.current && localStream && isVideoCall) {
       localVideoRef.current.srcObject = localStream;
     }
   }, [localStream, isVideoCall]);
 
+  // Bind remote video element tracks
   useEffect(() => {
     if (remoteVideoRef.current && remoteStream && isVideoCall) {
       remoteVideoRef.current.srcObject = remoteStream;
     }
   }, [remoteStream, isVideoCall]);
 
-  // Handle hardware muting toggles
+  // FIX: Dynamic structural routing block explicitly attaching audio streams to the audio ref element node
+  useEffect(() => {
+    if (audioPlaybackRef.current && remoteStream) {
+      console.log("SUCCESS: Binding remote stream tracks directly into HTMLAudioElement context frame.");
+      audioPlaybackRef.current.srcObject = remoteStream;
+      
+      // Auto-trigger fallback to address strict browser permission structures
+      audioPlaybackRef.current.play().catch(err => {
+        console.warn("Browser audio auto-play policy restriction caught, resolving stream actively:", err);
+      });
+    }
+  }, [remoteStream]);
+
+  // Handle hardware muting controls
   useEffect(() => {
     if (localStream) {
       localStream.getAudioTracks().forEach(track => track.enabled = micEnabled);
@@ -92,12 +90,10 @@ const { localStream, remoteStream } =
     }
   }, [cameraEnabled, localStream, isVideoCall]);
 
-  // Sync initial camera state if call type changes live
   useEffect(() => {
     setCameraEnabled(isVideoCall);
   }, [isVideoCall]);
 
-  // Fetch partner details if missing
   useEffect(() => {
     async function fetchPartnerDetails() {
       if (!currentCall) return;
@@ -122,66 +118,40 @@ const { localStream, remoteStream } =
     }
   }, [currentCall, isCaller, partnerProfile]);
 
-  // Timer configuration
   useEffect(() => {
     if (!isConnected) return;
-
     const answeredAt = new Date(currentCall.answered_at).getTime();
-
     const updateTimer = () => {
-        const now = Date.now();
-        setDuration(Math.floor((now - answeredAt) / 1000));
+      const now = Date.now();
+      setDuration(Math.floor((now - answeredAt) / 1000));
     };
-
     updateTimer();
-
     const interval = setInterval(updateTimer, 1000);
-
     return () => clearInterval(interval);
+  }, [isConnected, currentCall?.answered_at]);
 
-}, [isConnected, currentCall?.answered_at]);
-
-  // Subscribe to real-time database updates for changes
   useEffect(() => {
     if (!currentCall?.id) return;
-
     const channel = subscribeCallUpdates(currentCall.id, (updatedCall) => {
-      console.log("Realtime call row update:", updatedCall);
       setCurrentCall(updatedCall);
-      
-      if (
-    updatedCall.status === "ended" ||
-    updatedCall.status === "declined"
-) {
-    navigate("/chat");
-}
+      if (updatedCall.status === "ended" || updatedCall.status === "declined") {
+        navigate("/chat");
+      }
     });
-
     return () => {
       if (channel) channel.unsubscribe();
     };
   }, [currentCall?.id, navigate]);
 
   async function handleAccept() {
-  if (!currentCall?.id) return;
-
-  try {
-    console.log("===== ACCEPT BUTTON CLICKED =====");
-    console.log("Current Call:", currentCall);
-
-    const updated = await acceptCall(currentCall.id);
-
-    console.log("Supabase returned:");
-    console.log(updated);
-
-    setCurrentCall(updated);
-
-    console.log("Current call updated locally.");
-
-  } catch (err) {
-    console.error("Error accepting call:", err);
+    if (!currentCall?.id) return;
+    try {
+      const updated = await acceptCall(currentCall.id);
+      setCurrentCall(updated);
+    } catch (err) {
+      console.error("Error accepting call:", err);
+    }
   }
-}
 
   async function handleDecline() {
     if (!currentCall?.id) return;
@@ -203,7 +173,6 @@ const { localStream, remoteStream } =
     }
   }
 
-  // Quick Switch: Function to dynamic toggle between Voice and Video modes mid-call
   async function toggleCallType() {
     if (!currentCall?.id) return;
     const nextType = isVideoCall ? "voice" : "video";
@@ -224,19 +193,14 @@ const { localStream, remoteStream } =
 
   const minutes = String(Math.floor(duration / 60)).padStart(2, "0");
   const seconds = String(duration % 60).padStart(2, "0");
-
   const partnerName = partnerProfile?.display_name || "Kritikamukhia09";
   const avatarLetter = partnerName.charAt(0).toUpperCase();
-
-  // Strict local control checking for incoming screens
- const isIncomingCallPending =
-    currentCall?.receiver_id === myId &&
-    currentCall?.status === "ringing";
+  const isIncomingCallPending = currentCall?.receiver_id === myId && currentCall?.status === "ringing";
 
   return (
     <div className="relative h-screen bg-zinc-950 text-white flex flex-col items-center justify-center overflow-hidden">
       
-      {/* 1. Remote Viewport Media Player */}
+      {/* 1. Remote Layout Framework */}
       {isVideoCall && isConnected && remoteStream ? (
         <video
           ref={remoteVideoRef}
@@ -245,19 +209,15 @@ const { localStream, remoteStream } =
           className="absolute inset-0 w-full h-full object-cover z-0"
         />
       ) : (
-        /* Standby Audio Canvas Mode */
+        /* Standby Audio UI Backdrop */
         <div className="flex flex-col items-center z-10">
           <div className="w-40 h-40 rounded-full bg-gradient-to-br from-blue-600 to-cyan-500 flex items-center justify-center text-5xl font-bold shadow-xl animate-pulse">
             {avatarLetter}
           </div>
           <h1 className="text-3xl font-bold mt-8 tracking-wide">{partnerName}</h1>
           <p className="text-zinc-400 mt-2 font-medium tracking-wider text-sm bg-zinc-900/50 px-3 py-1 rounded-full border border-zinc-800">
-    {isConnected
-        ? "Connected"
-        : isRinging
-        ? "Calling..."
-        : callStatus}
-</p>
+            {isConnected ? "Connected" : isRinging ? "Calling..." : callStatus}
+          </p>
           {isConnected && (
             <p className="text-xl font-mono mt-4 bg-zinc-900 px-4 py-1.5 rounded-xl border border-zinc-800 text-cyan-400">
               {minutes}:{seconds}
@@ -266,7 +226,7 @@ const { localStream, remoteStream } =
         </div>
       )}
 
-      {/* 2. Mini Self-View Frame */}
+      {/* 2. Self View Frame overlay */}
       {isVideoCall && localStream && cameraEnabled && (
         <div className="absolute top-6 right-6 w-32 h-48 md:w-40 md:h-56 rounded-2xl overflow-hidden border-2 border-zinc-800 shadow-2xl z-20 bg-zinc-900">
           <video
@@ -279,78 +239,43 @@ const { localStream, remoteStream } =
         </div>
       )}
 
-      {/* 3. Operational Overlay Tag */}
-      {isConnected && isVideoCall && (
-        <div className="absolute top-6 left-6 z-20 bg-zinc-950/70 backdrop-blur-md px-4 py-2 rounded-2xl border border-zinc-800 flex flex-col gap-0.5">
-          <p className="font-semibold tracking-wide">{partnerName}</p>
-          <p className="text-xs font-mono text-cyan-400">{minutes}:{seconds}</p>
-        </div>
-      )}
-
-      {/* 4. Controls Footer Center Panel */}
+      {/* 3. Controls Layout Container */}
       <div className="absolute bottom-10 left-1/2 transform -translate-x-1/2 flex items-center gap-6 z-30 bg-zinc-900/40 backdrop-blur-lg px-6 py-4 rounded-3xl border border-zinc-800/50 shadow-2xl">
-        
-        {/* Mic Toggle Button */}
         <button
           onClick={() => setMicEnabled(!micEnabled)}
           className={`w-14 h-14 rounded-full flex items-center justify-center border transition-all duration-200 ${
-            micEnabled 
-              ? "bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-white" 
-              : "bg-red-500/20 border-red-500 text-red-500"
+            micEnabled ? "bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-white" : "bg-red-500/20 border-red-500 text-red-500"
           }`}
         >
           {micEnabled ? <FiMic size={22} /> : <FiMicOff size={22} />}
         </button>
 
-        {/* Call Management Buttons */}
         {isIncomingCallPending ? (
           <>
-            <button
-              onClick={handleDecline}
-              className="w-16 h-16 rounded-full bg-red-600 hover:bg-red-700 active:scale-95 flex items-center justify-center text-white transition-all shadow-lg"
-            >
-              <FiPhoneOff size={26} />
-            </button>
-            <button
-              onClick={handleAccept}
-              className="w-16 h-16 rounded-full bg-green-600 hover:bg-green-700 active:scale-95 flex items-center justify-center text-white transition-all shadow-lg"
-            >
-              <FiPhone size={26} />
-            </button>
+            <button onClick={handleDecline} className="w-16 h-16 rounded-full bg-red-600 flex items-center justify-center text-white"><FiPhoneOff size={26} /></button>
+            <button onClick={handleAccept} className="w-16 h-16 rounded-full bg-green-600 flex items-center justify-center text-white"><FiPhone size={26} /></button>
           </>
         ) : (
-          <button
-            onClick={handleEndCall}
-            className="w-16 h-16 rounded-full bg-red-600 hover:bg-red-700 active:scale-95 flex items-center justify-center text-white transition-all shadow-lg"
-          >
-            <FiPhoneOff size={26} />
-          </button>
+          <button onClick={handleEndCall} className="w-16 h-16 rounded-full bg-red-600 flex items-center justify-center text-white"><FiPhoneOff size={26} /></button>
         )}
 
-        {/* Dynamic Upgrade Mode Switcher Button */}
         <button
           onClick={toggleCallType}
           disabled={!isConnected}
           className={`w-14 h-14 rounded-full flex items-center justify-center border transition-all duration-200 ${
-            isVideoCall 
-              ? "bg-cyan-600 border-cyan-500 hover:bg-cyan-700 text-white shadow-md shadow-cyan-500/20" 
-              : "bg-zinc-900 border-zinc-800 hover:bg-zinc-800 text-zinc-400 hover:text-white"
+            isVideoCall ? "bg-cyan-600 border-cyan-500 text-white" : "bg-zinc-900 border-zinc-800 text-zinc-400"
           } ${!isConnected ? "opacity-40 cursor-not-allowed" : ""}`}
-          title={isVideoCall ? "Switch to Audio Call" : "Switch to Video Call"}
         >
           {isVideoCall ? <FiVideo size={22} /> : <FiVideoOff size={22} />}
         </button>
       </div>
 
-       {/* Hidden audio player for remote voice */}
+      {/* FIX: Unconditional persistent audio component rendering layout to support both voice and video fallback tracks instantly */}
       <audio
+        ref={audioPlaybackRef}
         autoPlay
         playsInline
-        ref={(audio) => {
-          if (audio && remoteStream) {
-            audio.srcObject = remoteStream;
-          }
-        }}
+        className="hidden absolute w-0 h-0 opacity-0 pointer-events-none appearance-none"
       />
 
     </div>
