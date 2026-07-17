@@ -45,7 +45,10 @@ export default function Home() {
         <ProfileCard />
 
         {/* Partner - Now explicitly receiving partner state! */}
-        <PartnerCard partner={partner} />
+        <PartnerCard
+  user={user}
+  partner={partner}
+/>
 
         {/* Search Partner */}
         <PartnerSearch />

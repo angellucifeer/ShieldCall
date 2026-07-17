@@ -19,6 +19,7 @@ export default function CallScreen() {
 }, [initialCall]);
 
   const callStatus = currentCall?.status;
+  console.log("Current Call Status:", callStatus);
 
 const isConnected = callStatus === "accepted";
 
@@ -36,10 +37,30 @@ const isEnded =
   const [micEnabled, setMicEnabled] = useState(true);
   const [cameraEnabled, setCameraEnabled] = useState(isVideoCall);
   const [partnerProfile, setPartnerProfile] = useState(initialPartner || null);
+  const [myId, setMyId] = useState(null);
 
+  useEffect(() => {
+  async function getCurrentUser() {
+    const { data } = await supabase.auth.getUser();
+    setMyId(data.user?.id);
+  }
+
+  getCurrentUser();
+}, []);
+
+console.log("CallScreen");
+console.log("callId:", currentCall?.id);
+console.log("isCaller:", isCaller);
+console.log("isVideoCall:", isVideoCall);
+console.log("status =", currentCall?.status);
   // Initialize WebRTC hook
-  const { localStream, remoteStream } = useWebRTC(currentCall?.id, isCaller);
-
+const { localStream, remoteStream } =
+    useWebRTC(
+        currentCall?.id,
+        isCaller,
+        isVideoCall,
+        currentCall?.status
+    );
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
 
@@ -142,15 +163,25 @@ const isEnded =
   }, [currentCall?.id, navigate]);
 
   async function handleAccept() {
-    if (!currentCall?.id) return;
-    try {  // Set instantly to clear UI blocking states
-      const updated = await acceptCall(currentCall.id);
+  if (!currentCall?.id) return;
 
-setCurrentCall(updated);
-    } catch (err) {
-      console.error("Error accepting call:", err);
-    }
+  try {
+    console.log("===== ACCEPT BUTTON CLICKED =====");
+    console.log("Current Call:", currentCall);
+
+    const updated = await acceptCall(currentCall.id);
+
+    console.log("Supabase returned:");
+    console.log(updated);
+
+    setCurrentCall(updated);
+
+    console.log("Current call updated locally.");
+
+  } catch (err) {
+    console.error("Error accepting call:", err);
   }
+}
 
   async function handleDecline() {
     if (!currentCall?.id) return;
@@ -198,9 +229,9 @@ setCurrentCall(updated);
   const avatarLetter = partnerName.charAt(0).toUpperCase();
 
   // Strict local control checking for incoming screens
-  const isIncomingCallPending =
-  !isCaller &&
-  isRinging;
+ const isIncomingCallPending =
+    currentCall?.receiver_id === myId &&
+    currentCall?.status === "ringing";
 
   return (
     <div className="relative h-screen bg-zinc-950 text-white flex flex-col items-center justify-center overflow-hidden">
@@ -310,6 +341,18 @@ setCurrentCall(updated);
           {isVideoCall ? <FiVideo size={22} /> : <FiVideoOff size={22} />}
         </button>
       </div>
+
+       {/* Hidden audio player for remote voice */}
+      <audio
+        autoPlay
+        playsInline
+        ref={(audio) => {
+          if (audio && remoteStream) {
+            audio.srcObject = remoteStream;
+          }
+        }}
+      />
+
     </div>
   );
 }

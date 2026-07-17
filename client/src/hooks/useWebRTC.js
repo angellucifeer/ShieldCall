@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "../services/supabase";
 
-export default function useWebRTC(callId, isCaller) {
+export default function useWebRTC(
+    callId,
+    isCaller,
+    isVideoCall,
+    callStatus
+) {
   const [localStream, setLocalStream] = useState(null);
   const [remoteStream, setRemoteStream] = useState(null);
   
@@ -17,6 +22,10 @@ export default function useWebRTC(callId, isCaller) {
 
   useEffect(() => {
     if (!callId) return;
+    if (callStatus !== "accepted") {
+    console.log("Waiting for call to be accepted...");
+    return;
+}
 
     let channel = null;
 
@@ -32,14 +41,22 @@ export default function useWebRTC(callId, isCaller) {
         }
 
         // 1. Capture local audio and video streams
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-          video: true,
-        });
+      console.log("Opening camera/mic...");
+
+const stream = await navigator.mediaDevices.getUserMedia({
+  audio: true,
+  video: isVideoCall,
+});
+
+console.log("Camera/mic opened successfully");
+
         setLocalStream(stream);
         localStreamRef.current = stream;
 
         // 2. Initialize the RTCPeerConnection object
+        if (peerConnection.current) {
+    peerConnection.current.close();
+}
         peerConnection.current = new RTCPeerConnection(iceServers);
 
         // 3. Attach local media tracks to the peer connection
@@ -48,11 +65,15 @@ export default function useWebRTC(callId, isCaller) {
         });
 
         // 4. Handle incoming remote stream tracks
-        peerConnection.current.ontrack = (event) => {
-          if (event.streams && event.streams[0]) {
-            setRemoteStream(event.streams[0]);
-          }
-        };
+       peerConnection.current.ontrack = (event) => {
+
+    console.log("Remote track received", event);
+
+    if (event.streams.length > 0) {
+        setRemoteStream(event.streams[0]);
+    }
+
+};
 
         // 5. Handle local ICE Candidate generation safely without async conflicts
         peerConnection.current.onicecandidate = (event) => {
@@ -70,60 +91,161 @@ export default function useWebRTC(callId, isCaller) {
         };
 
         // 6. If you are the caller, create the WebRTC SDP Offer
+
+        console.log("About to create offer");
+console.log("isCaller =", isCaller);
+console.log("callId =", callId);
+
         if (isCaller) {
+          console.log("ENTERED OFFER BLOCK");
           const offer = await peerConnection.current.createOffer();
           await peerConnection.current.setLocalDescription(offer);
           
           console.log("Caller sending SDP Offer...");
-          const { error } = await supabase.from("call_signals").insert({
-            call_id: callId,
-            type: "offer",
-            payload: offer,
-            sender_id: currentUserId,
-          });
-          if (error) console.error("Error sending offer:", error);
+
+const { data, error } = await supabase
+  .from("call_signals")
+  .insert({
+    call_id: callId,
+    type: "offer",
+    payload: offer,
+    sender_id: currentUserId,
+  })
+  .select();
+
+console.log("Offer insert result:", data);
+console.log("Offer insert error:", error);
         }
 
-        // 7. Subscribe to real-time signaling exchanges from the database
-        channel = supabase
-          .channel(`signaling:${callId}`)
-          .on(
-            "postgres_changes",
-            { event: "INSERT", schema: "public", table: "call_signals", filter: `call_id=eq.${callId}` },
-            async (payload) => {
-              const newSignal = payload.new;
+        // 7. Subscribe to real-time signaling exchanges
+channel = supabase
+  .channel(`signaling:${callId}`)
+  .on(
+    "postgres_changes",
+    {
+      event: "INSERT",
+      schema: "public",
+      table: "call_signals",
+      filter: `call_id=eq.${callId}`,
+    },
+    async (payload) => {
+      const newSignal = payload.new;
 
-              // Ignore signals sent by yourself
-              if (newSignal.sender_id === currentUserId) return;
+      // Ignore your own signals
+      if (newSignal.sender_id === currentUserId) return;
 
-              console.log(`Received WebRTC Signal (${newSignal.type}):`, newSignal);
+      console.log(
+        `Received WebRTC Signal (${newSignal.type})`,
+        newSignal
+      );
 
-              try {
-                if (newSignal.type === "offer" && !isCaller) {
-                  // Receiver handling the offer
-                  await peerConnection.current.setRemoteDescription(new RTCSessionDescription(newSignal.payload));
-                  const answer = await peerConnection.current.createAnswer();
-                  await peerConnection.current.setLocalDescription(answer);
+      try {
 
-                  await supabase.from("call_signals").insert({
-                    call_id: callId,
-                    type: "answer",
-                    payload: answer,
-                    sender_id: currentUserId,
-                  });
-                } else if (newSignal.type === "answer" && isCaller) {
-                  // Caller handling the answer
-                  await peerConnection.current.setRemoteDescription(new RTCSessionDescription(newSignal.payload));
-                } else if (newSignal.type === "candidate") {
-                  // Add trickle ICE candidate to connection
-                  await peerConnection.current.addIceCandidate(new RTCIceCandidate(newSignal.payload));
-                }
-              } catch (err) {
-                console.error("Error processing incoming signaling data:", err);
-              }
-            }
-          )
-          .subscribe();
+        // ================= RECEIVER =================
+        if (newSignal.type === "offer" && !isCaller) {
+
+          console.log("========== RECEIVER ==========");
+          console.log("Received OFFER");
+
+          await peerConnection.current.setRemoteDescription(
+            new RTCSessionDescription(newSignal.payload)
+          );
+
+          console.log("Remote description set");
+
+          const answer =
+            await peerConnection.current.createAnswer();
+
+          console.log("Answer created");
+
+          await peerConnection.current.setLocalDescription(answer);
+
+          console.log("Local description set");
+
+          const { data, error } = await supabase
+            .from("call_signals")
+            .insert({
+              call_id: callId,
+              type: "answer",
+              payload: answer,
+              sender_id: currentUserId,
+            });
+
+          if (error) {
+            console.error(error);
+          }
+
+          console.log("Answer sent");
+        }
+
+        // ================= CALLER =================
+        else if (newSignal.type === "answer" && isCaller) {
+
+          console.log("========== CALLER ==========");
+          console.log("Received ANSWER");
+
+          await peerConnection.current.setRemoteDescription(
+            new RTCSessionDescription(newSignal.payload)
+          );
+
+          console.log("Remote description applied");
+        }
+
+        // ================= ICE =================
+        else if (newSignal.type === "candidate") {
+
+          console.log("Received ICE candidate");
+
+          await peerConnection.current.addIceCandidate(
+            new RTCIceCandidate(newSignal.payload)
+          );
+
+          console.log("ICE candidate added");
+        }
+
+      } catch (err) {
+        console.error("Signaling Error:", err);
+      }
+    }
+  )
+  .subscribe();
+
+  const { data: signals } = await supabase
+  .from("call_signals")
+  .select("*")
+  .eq("call_id", callId)
+  .order("created_at", { ascending: true });
+
+if (signals) {
+  for (const signal of signals) {
+    if (signal.sender_id === currentUserId) continue;
+
+    console.log("Found existing signal:", signal.type);
+
+    if (signal.type === "offer" && !isCaller) {
+      await peerConnection.current.setRemoteDescription(
+        new RTCSessionDescription(signal.payload)
+      );
+
+      const answer = await peerConnection.current.createAnswer();
+
+      await peerConnection.current.setLocalDescription(answer);
+
+      await supabase.from("call_signals").insert({
+        call_id: callId,
+        type: "answer",
+        payload: answer,
+        sender_id: currentUserId,
+      });
+    }
+
+    if (signal.type === "answer" && isCaller) {
+      await peerConnection.current.setRemoteDescription(
+        new RTCSessionDescription(signal.payload)
+      );
+    }
+  }
+}
 
       } catch (err) {
         console.error("Failed to initialize WebRTC streams:", err);
@@ -141,10 +263,10 @@ export default function useWebRTC(callId, isCaller) {
         peerConnection.current.close();
       }
       if (channel) {
-        supabase.channel(`signaling:${callId}`).unsubscribe();
-      }
+    channel.unsubscribe();
+}
     };
-  }, [callId, isCaller]);
+}, [callId, isCaller, callStatus, isVideoCall]);
 
   return { localStream, remoteStream };
 }

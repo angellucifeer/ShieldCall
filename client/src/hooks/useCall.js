@@ -16,10 +16,12 @@ export default function useCall(user) {
     console.log("Subscribing to global incoming call channel for user:", user.id);
 
     const channel = listenIncomingCalls(user.id, async (callData) => {
+
       console.log("Incoming call received via Supabase Realtime:", callData);
       
       // ONLY trigger incoming call overlay if the call row status is actually pending/ringing
       if (callData && (callData.status === "ringing" || callData.status === "pending")) {
+        console.log("Setting incoming call:", callData.id);
         setIncomingCall(callData);
 
         if (callData?.caller_id) {
@@ -44,12 +46,43 @@ export default function useCall(user) {
       }
     });
 
-    return () => {
-      if (channel) {
-        console.log("Cleaning up global incoming call subscription for user:", user.id);
-        channel.unsubscribe();
+    const updateChannel = supabase
+  .channel(`incoming-call-update-${user.id}`)
+  .on(
+    "postgres_changes",
+    {
+      event: "UPDATE",
+      schema: "public",
+      table: "call_invites",
+      filter: `receiver_id=eq.${user.id}`,
+    },
+    (payload) => {
+      const updated = payload.new;
+
+      if (
+        updated.status === "accepted" ||
+        updated.status === "ended" ||
+        updated.status === "declined"
+      ) {
+        console.log("Removing incoming popup");
+        setIncomingCall(null);
+        setCallerProfile(null);
       }
-    };
+    }
+  )
+  .subscribe();
+
+   return () => {
+  console.log("Cleaning up global incoming call subscription for user:", user.id);
+
+  if (channel) {
+    channel.unsubscribe();
+  }
+
+  if (updateChannel) {
+    updateChannel.unsubscribe();
+  }
+};
   }, [user]);
 
   async function answer() {

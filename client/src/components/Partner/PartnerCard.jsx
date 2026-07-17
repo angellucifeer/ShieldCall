@@ -4,10 +4,14 @@ import {
   FiVideo,
   FiHeart,
 } from "react-icons/fi";
+import { startCall } from "../../services/call/callService";
 
 import { useNavigate } from "react-router-dom";
 
-export default function PartnerCard({ partner }) {
+export default function PartnerCard({
+  user,
+  partner,
+}) {
   const navigate = useNavigate();
 
   // No partner linked
@@ -35,6 +39,47 @@ export default function PartnerCard({ partner }) {
       </div>
     );
   }
+
+  async function handleVideoCall() {
+  try {
+    console.log("Starting video call", user.id, partner.id);
+    const call = await startCall(
+      user.id,
+      partner.id,
+      "video"
+    );
+
+    navigate("/call", {
+      state: {
+        call,
+        partner,
+        isCaller: true,
+      },
+    });
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function handleVoiceCall() {
+  try {
+    const call = await startCall(
+      user.id,
+      partner.id,
+      "voice"
+    );
+
+    navigate("/call", {
+      state: {
+        call,
+        partner,
+        isCaller: true,
+      },
+    });
+  } catch (err) {
+    console.error(err);
+  }
+}
 
   const initials =
     partner.display_name
@@ -141,7 +186,7 @@ export default function PartnerCard({ partner }) {
 
         {/* Voice */}
         <button
-          onClick={() => navigate("/call?type=voice")}
+          onClick={handleVoiceCall}
           className="flex flex-col items-center justify-center gap-2 bg-zinc-800 hover:bg-green-600 transition-all duration-300 rounded-2xl py-5"
         >
           <FiPhone size={24} />
@@ -153,8 +198,8 @@ export default function PartnerCard({ partner }) {
 
         {/* Video */}
         <button
-          onClick={() => navigate("/call?type=video")}
-          className="flex flex-col items-center justify-center gap-2 bg-zinc-800 hover:bg-purple-600 transition-all duration-300 rounded-2xl py-5"
+        onClick={handleVideoCall}
+className="flex flex-col items-center justify-center gap-2 bg-zinc-800 hover:bg-purple-600 transition-all duration-300 rounded-2xl py-5"
         >
           <FiVideo size={24} />
 

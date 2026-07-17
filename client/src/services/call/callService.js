@@ -38,7 +38,7 @@ export function listenIncomingCalls(
   channel.on(
     "postgres_changes",
     {
-      event: "*",
+      event: "INSERT",
       schema: "public",
       table: "call_invites",
       filter: `receiver_id=eq.${userId}`,

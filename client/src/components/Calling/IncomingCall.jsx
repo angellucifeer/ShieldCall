@@ -1,12 +1,12 @@
 import { FiPhone, FiPhoneOff } from "react-icons/fi";
-import { useNavigate } from "react-router-dom";
 
 export default function IncomingCall({
   call,
   onAnswer,
   onDecline,
 }) {
-    const navigate = useNavigate();
+
+  console.log("IncomingCall rendered:", call?.id);
 
   if (!call) return null;
 
@@ -51,18 +51,7 @@ export default function IncomingCall({
           </button>
 
           <button
-  onClick={async () => {
-
-    await onAnswer();
-
-    navigate("/call", {
-      state: {
-        call,
-        isCaller: false,
-      },
-    });
-
-  }}
+  onClick={onAnswer}
   className="w-16 h-16 rounded-full bg-green-600 flex items-center justify-center"
 >
   <FiPhone size={28} />
