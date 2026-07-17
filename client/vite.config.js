@@ -8,11 +8,22 @@ export default defineConfig({
     tailwindcss(),
   ],
   build: {
-    // Forces the compiler to skip hanging processes by using standard esbuild minification
     minify: 'esbuild',
     cssMinify: true,
-    // Prevents bundling pipelines from freezing on warnings or infinite file loops
     reportCompressedSize: false,
-    chunkSizeWarningLimit: 1000,
+    chunkSizeWarningLimit: 2000,
+    rollupOptions: {
+      output: {
+        // Splitting large realtime modules prevents the compiler worker threads from locking up
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('@supabase') || id.includes('react-router-dom')) {
+              return 'vendor-core';
+            }
+            return 'vendor';
+          }
+        }
+      }
+    }
   }
 })
