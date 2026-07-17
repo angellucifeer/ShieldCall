@@ -1,3 +1,23 @@
+/* 1. Tailwind core directive MUST go first */
+@import "tailwindcss";
+
+/* 2. Global element overrides come second */
+html,
+body,
+#root {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    background: #09090b;
+    color: white;
+    font-family: Inter, system-ui, sans-serif;
+}
+
+/* 3. Your custom utility utility classes at the bottom */
 .page {
   width: 100%;
   height: 100vh;
@@ -14,24 +34,4 @@
   color: white;
 
   text-align: center;
-}
-
-@import "tailwindcss";
-
-html,
-body,
-#root {
-    width: 100%;
-    height: 100%;
-    margin: 0;
-    padding: 0;
-}
-
-body{
-    background:#09090B;
-    color:white;
-    font-family:
-    Inter,
-    system-ui,
-    sans-serif;
 }
