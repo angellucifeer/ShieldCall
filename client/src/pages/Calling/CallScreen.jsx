@@ -235,15 +235,41 @@ const dragOffset = useRef({
   };
 };
 
+// 👇 ADD THIS HERE
 const onDrag = (e) => {
   if (!dragRef.current) return;
 
   const point = e.touches ? e.touches[0] : e;
 
+  const previewWidth = window.innerWidth >= 768 ? 160 : 128;
+  const previewHeight = window.innerWidth >= 768 ? 224 : 192;
+
+  const margin = 10;
+  const bottomReservedSpace = 140;
+
+  const minX = margin;
+  const maxX = window.innerWidth - previewWidth - margin;
+
+  const minY = 20;
+  const maxY =
+    window.innerHeight -
+    previewHeight -
+    bottomReservedSpace;
+
+  let newX = point.clientX - dragOffset.current.x;
+  let newY = point.clientY - dragOffset.current.y;
+
+  newX = Math.max(minX, Math.min(maxX, newX));
+  newY = Math.max(minY, Math.min(maxY, newY));
+
   setPreviewPosition({
-    x: point.clientX - dragOffset.current.x,
-    y: point.clientY - dragOffset.current.y,
+    x: newX,
+    y: newY,
   });
+};
+
+const stopDrag = () => {
+  dragRef.current = false;
 };
 
 const stopDrag = () => {
