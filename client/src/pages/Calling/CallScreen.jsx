@@ -274,18 +274,15 @@ const stopDrag = () => {
   dragRef.current = false;
 
   const previewWidth = window.innerWidth >= 768 ? 160 : 128;
-
-  const visiblePart = 30; // visible portion after hiding
+  const visiblePart = 30;
 
   let x;
   let side;
 
   if (previewPosition.x < window.innerWidth / 2) {
-    // Hide on left
     x = -(previewWidth - visiblePart);
     side = "left";
   } else {
-    // Hide on right
     x = window.innerWidth - visiblePart;
     side = "right";
   }
@@ -337,9 +334,11 @@ const stopDrag = () => {
   style={{
     left: previewPosition.x,
     top: previewPosition.y,
+    transition: "transform .25s ease",
     touchAction: "none",
+    userSelect: "none",
     WebkitUserSelect: "none",
-  }}
+}}
   className="absolute z-20
 w-32 h-48
 md:w-40 md:h-56
@@ -356,14 +355,16 @@ duration-300"
   onMouseUp={stopDrag}
 
   onTouchStart={(e) => {
-    e.preventDefault();
-    startDrag(e);
-  }}
-  onTouchMove={(e) => {
-    e.preventDefault();
-    onDrag(e);
-  }}
-  onTouchEnd={stopDrag}
+  e.preventDefault();
+  startDrag(e);
+}}
+
+onTouchMove={(e) => {
+  e.preventDefault();
+  onDrag(e);
+}}
+
+onTouchEnd={stopDrag}
 >
   <video
     ref={localVideoRef}
@@ -371,7 +372,7 @@ duration-300"
     playsInline
     muted
     className="w-full h-full object-cover scale-x-[-1]"
-  />
+/>
 </div>
 )}
 
