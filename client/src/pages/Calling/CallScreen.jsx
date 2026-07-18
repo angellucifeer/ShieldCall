@@ -318,12 +318,16 @@ export default function CallScreen() {
       </div>
 
       {/* Hidden iOS Audio Stream Context Holder */}
-      <audio
-        ref={audioPlaybackRef}
-        autoPlay
-        playsInline
-        style={{ display: "none", width: 0, height: 0, opacity: 0 }}
-      />
+      {/* FIXED AUDIO INJECTION LAYER FOR WIRELESS EARBUDS & LOUDSPEAKER ROUTING */}
+<audio
+  ref={audioPlaybackRef}
+  autoPlay
+  playsInline
+  controls={false}
+  muted={false}
+  preload="auto"
+  style={{ display: "block", width: "1px", height: "1px", opacity: 0, pointerEvents: "none" }}
+/>
     </div>
   );
 }
