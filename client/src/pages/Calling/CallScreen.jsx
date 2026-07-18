@@ -275,14 +275,18 @@ const stopDrag = () => {
 
   const previewWidth = window.innerWidth >= 768 ? 160 : 128;
 
-  let x = previewPosition.x;
-  let side = null;
+  const visiblePart = 30; // visible portion after hiding
 
-  if (x < window.innerWidth / 2) {
-    x = 10;
+  let x;
+  let side;
+
+  if (previewPosition.x < window.innerWidth / 2) {
+    // Hide on left
+    x = -(previewWidth - visiblePart);
     side = "left";
   } else {
-    x = window.innerWidth - previewWidth - 10;
+    // Hide on right
+    x = window.innerWidth - visiblePart;
     side = "right";
   }
 
