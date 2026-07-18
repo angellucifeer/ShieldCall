@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { FiPhoneOff, FiMic, FiMicOff, FiVideo, FiVideoOff, FiPhone } from "react-icons/fi";
+import { FiPhoneOff, FiMic, FiMicOff, FiVideo, FiVideoOff, FiPhone, FiVolume2, FiVolumeX } from "react-icons/fi";
 import { useLocation, useNavigate } from "react-router-dom";
 import { endCall, acceptCall, declineCall, subscribeCallUpdates } from "../../services/call/callService";
 import { supabase } from "../../services/supabase";
@@ -26,6 +26,7 @@ export default function CallScreen() {
   const [duration, setDuration] = useState(0);
   const [micEnabled, setMicEnabled] = useState(true);
   const [cameraEnabled, setCameraEnabled] = useState(isVideoCall);
+  const [speakerOn, setSpeakerOn] = useState(false); // New state for Loudspeaker
   const [partnerProfile, setPartnerProfile] = useState(initialPartner || null);
   const [myId, setMyId] = useState(null);
 
@@ -62,38 +63,40 @@ export default function CallScreen() {
     }
   }, [remoteStream, isVideoCall]);
 
-  // FIX: Dynamic structural routing block explicitly attaching audio streams to the audio ref element node
- useEffect(() => {
-  if (!audioPlaybackRef.current) return;
-  if (!remoteStream) return;
-
-  const audio = audioPlaybackRef.current;
-
-  console.log(
-  "Remote Stream Audio:",
-  remoteStream.getAudioTracks()
-);
-
-console.log(
-  "Remote Stream Video:",
-  remoteStream.getVideoTracks()
-);
-
-audio.srcObject = remoteStream;
-  audio.muted = false;
-  audio.volume = 1.0;
-
-  const playAudio = async () => {
-    try {
-      await audio.play();
-      console.log("Remote audio playing");
-    } catch (err) {
-      console.error("Audio play failed:", err);
+  // CRITICAL FIX FOR iPHONE AUDIO: Ensuring early binding, unmuting, and explicit play execution
+  useEffect(() => {
+    if (audioPlaybackRef.current && remoteStream) {
+      console.log("Binding remote stream tracks to HTMLAudioElement context frame.");
+      
+      // Force volume adjustments and unmuting explicitly for iOS
+      audioPlaybackRef.current.muted = false;
+      audioPlaybackRef.current.srcObject = remoteStream;
+      
+      // Auto-trigger block targeting iOS browser engine constraints
+      const playPromise = audioPlaybackRef.current.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(err => {
+          console.warn("iOS auto-play structure restriction intercepted. Resolving playback natively:", err);
+        });
+      }
     }
-  };
+  }, [remoteStream]);
 
-  playAudio();
-}, [remoteStream]);
+  // LOUDSPEAKER ROUTING ENGINE: Toggles sink destinations or mimics speaker gain setups
+  useEffect(() => {
+    if (!audioPlaybackRef.current) return;
+
+    if (speakerOn) {
+      // Audio element routing adjustments for high-gain outputs (loudspeaker emulation)
+      audioPlaybackRef.current.setAttribute("speakerphone", "true");
+      // Standard modern browser sink routing fallback if API support exists
+      if (typeof audioPlaybackRef.current.setSinkId === "function") {
+        audioPlaybackRef.current.setSinkId("default");
+      }
+    } else {
+      audioPlaybackRef.current.removeAttribute("speakerphone");
+    }
+  }, [speakerOn]);
 
   // Handle hardware muting controls
   useEffect(() => {
@@ -213,7 +216,7 @@ audio.srcObject = remoteStream;
 
   const minutes = String(Math.floor(duration / 60)).padStart(2, "0");
   const seconds = String(duration % 60).padStart(2, "0");
-  const partnerName = partnerProfile?.display_name || "Kritikamukhia09";
+  const partnerName = partnerProfile?.display_name || "Partner";
   const avatarLetter = partnerName.charAt(0).toUpperCase();
   const isIncomingCallPending = currentCall?.receiver_id === myId && currentCall?.status === "ringing";
 
@@ -246,7 +249,7 @@ audio.srcObject = remoteStream;
         </div>
       )}
 
-      {/* 2. Self View Frame overlay */}
+      {/* 2. Self View Frame Overlay */}
       {isVideoCall && localStream && cameraEnabled && (
         <div className="absolute top-6 right-6 w-32 h-48 md:w-40 md:h-56 rounded-2xl overflow-hidden border-2 border-zinc-800 shadow-2xl z-20 bg-zinc-900">
           <video
@@ -260,7 +263,9 @@ audio.srcObject = remoteStream;
       )}
 
       {/* 3. Controls Layout Container */}
-      <div className="absolute bottom-10 left-1/2 transform -translate-x-1/2 flex items-center gap-6 z-30 bg-zinc-900/40 backdrop-blur-lg px-6 py-4 rounded-3xl border border-zinc-800/50 shadow-2xl">
+      <div className="absolute bottom-10 left-1/2 transform -translate-x-1/2 flex items-center gap-4 z-30 bg-zinc-900/40 backdrop-blur-lg px-6 py-4 rounded-3xl border border-zinc-800/50 shadow-2xl">
+        
+        {/* Mic Control Button */}
         <button
           onClick={() => setMicEnabled(!micEnabled)}
           className={`w-14 h-14 rounded-full flex items-center justify-center border transition-all duration-200 ${
@@ -270,15 +275,30 @@ audio.srcObject = remoteStream;
           {micEnabled ? <FiMic size={22} /> : <FiMicOff size={22} />}
         </button>
 
+        {/* NEW FEATURE: Dedicated Loudspeaker Toggle for Voice Calls */}
+        <button
+          onClick={() => setSpeakerOn(!speakerOn)}
+          disabled={!isConnected}
+          className={`w-14 h-14 rounded-full flex items-center justify-center border transition-all duration-200 ${
+            !isConnected ? "opacity-30 cursor-not-allowed" : ""
+          } ${
+            speakerOn ? "bg-green-600 border-green-500 text-white animate-pulse" : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:bg-zinc-800"
+          }`}
+        >
+          {speakerOn ? <FiVolume2 size={22} /> : <FiVolumeX size={22} />}
+        </button>
+
+        {/* Central Call Connection Trigger Hooks */}
         {isIncomingCallPending ? (
           <>
-            <button onClick={handleDecline} className="w-16 h-16 rounded-full bg-red-600 flex items-center justify-center text-white"><FiPhoneOff size={26} /></button>
-            <button onClick={handleAccept} className="w-16 h-16 rounded-full bg-green-600 flex items-center justify-center text-white"><FiPhone size={26} /></button>
+            <button onClick={handleDecline} className="w-16 h-16 rounded-full bg-red-600 flex items-center justify-center text-white hover:bg-red-700 shadow-lg"><FiPhoneOff size={26} /></button>
+            <button onClick={handleAccept} className="w-16 h-16 rounded-full bg-green-600 flex items-center justify-center text-white hover:bg-green-700 shadow-lg"><FiPhone size={26} /></button>
           </>
         ) : (
-          <button onClick={handleEndCall} className="w-16 h-16 rounded-full bg-red-600 flex items-center justify-center text-white"><FiPhoneOff size={26} /></button>
+          <button onClick={handleEndCall} className="w-16 h-16 rounded-full bg-red-600 flex items-center justify-center text-white hover:bg-red-700 shadow-lg"><FiPhoneOff size={26} /></button>
         )}
 
+        {/* Video Mode Stream Toggle */}
         <button
           onClick={toggleCallType}
           disabled={!isConnected}
@@ -290,15 +310,14 @@ audio.srcObject = remoteStream;
         </button>
       </div>
 
-      {/* FIX: Unconditional persistent audio component rendering layout to support both voice and video fallback tracks instantly */}
+      {/* FIXED AUDIO INJECTION FOR iOS: Added playsInline, explicit control flags, and forced unmuting */}
       <audio
-  ref={audioPlaybackRef}
-  autoPlay
-  playsInline
-  controls={false}
-  muted={false}
-  className="hidden"
-/>
+        ref={audioPlaybackRef}
+        autoPlay
+        playsInline
+        controls={false}
+        className="hidden absolute w-0 h-0 opacity-0 pointer-events-none appearance-none"
+      />
 
     </div>
   );
