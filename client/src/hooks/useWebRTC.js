@@ -45,10 +45,19 @@ export default function useWebRTC(callId, isCaller, isVideoCall, callStatus) {
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: {
   echoCancellation: true,
-  noiseSuppression: false,
-  autoGainControl: false,
-  channelCount: 2,
+  noiseSuppression: true,
+  autoGainControl: true,
+
+  channelCount: 1,
+  sampleRate: 48000,
+  sampleSize: 16,
+
   latency: 0,
+
+  googEchoCancellation: true,
+  googNoiseSuppression: true,
+  googAutoGainControl: true,
+  googHighpassFilter: true,
 },
           video: isVideoCall,
         });

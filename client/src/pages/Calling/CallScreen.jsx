@@ -58,6 +58,18 @@ export default function CallScreen() {
   const remoteVideoRef = useRef(null);
   const audioPlaybackRef = useRef(null);
 
+
+  const [previewPosition, setPreviewPosition] = useState({
+  x: window.innerWidth - 170,
+  y: 30,
+});
+
+const dragRef = useRef(false);
+const dragOffset = useRef({
+  x: 0,
+  y: 0,
+});
+
   // Bind local video element tracks
   useEffect(() => {
     if (localVideoRef.current && localStream && isVideoCall) {
@@ -212,6 +224,32 @@ export default function CallScreen() {
     }
   }
 
+  const startDrag = (e) => {
+  dragRef.current = true;
+
+  const point = e.touches ? e.touches[0] : e;
+
+  dragOffset.current = {
+    x: point.clientX - previewPosition.x,
+    y: point.clientY - previewPosition.y,
+  };
+};
+
+const onDrag = (e) => {
+  if (!dragRef.current) return;
+
+  const point = e.touches ? e.touches[0] : e;
+
+  setPreviewPosition({
+    x: point.clientX - dragOffset.current.x,
+    y: point.clientY - dragOffset.current.y,
+  });
+};
+
+const stopDrag = () => {
+  dragRef.current = false;
+};
+
   const minutes = String(Math.floor(duration / 60)).padStart(2, "0");
   const seconds = String(duration % 60).padStart(2, "0");
   const partnerName = partnerProfile?.display_name || "Partner";
@@ -246,17 +284,39 @@ export default function CallScreen() {
       )}
 
       {/* Local Webcam Picture-in-Picture Frame Layer */}
-      {isVideoCall && localStream && cameraEnabled && (
-        <div className="absolute top-6 right-6 w-32 h-48 md:w-40 md:h-56 rounded-2xl overflow-hidden border-2 border-zinc-800 shadow-2xl z-20 bg-zinc-900">
-          <video
-            ref={localVideoRef}
-            autoPlay
-            playsInline
-            muted
-            className="w-full h-full object-cover scale-x-[-1]"
-          />
-        </div>
-      )}
+{isVideoCall && localStream && cameraEnabled && (
+  <div
+  style={{
+    left: previewPosition.x,
+    top: previewPosition.y,
+    touchAction: "none",
+    WebkitUserSelect: "none",
+  }}
+  className="absolute z-20 w-32 h-48 md:w-40 md:h-56 rounded-2xl overflow-hidden border-2 border-zinc-800 shadow-2xl bg-zinc-900"
+
+  onMouseDown={startDrag}
+  onMouseMove={onDrag}
+  onMouseUp={stopDrag}
+
+  onTouchStart={(e) => {
+    e.preventDefault();
+    startDrag(e);
+  }}
+  onTouchMove={(e) => {
+    e.preventDefault();
+    onDrag(e);
+  }}
+  onTouchEnd={stopDrag}
+>
+  <video
+    ref={localVideoRef}
+    autoPlay
+    playsInline
+    muted
+    className="w-full h-full object-cover scale-x-[-1]"
+  />
+</div>
+)}
 
       {/* Control Actions Tray Overlay */}
       <div className="absolute bottom-10 left-1/2 transform -translate-x-1/2 flex items-center gap-4 z-30 bg-zinc-900/40 backdrop-blur-lg px-6 py-4 rounded-3xl border border-zinc-800/50 shadow-2xl">
