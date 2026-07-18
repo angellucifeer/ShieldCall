@@ -272,10 +272,6 @@ const stopDrag = () => {
   dragRef.current = false;
 };
 
-const stopDrag = () => {
-  dragRef.current = false;
-};
-
   const minutes = String(Math.floor(duration / 60)).padStart(2, "0");
   const seconds = String(duration % 60).padStart(2, "0");
   const partnerName = partnerProfile?.display_name || "Partner";
