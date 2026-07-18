@@ -7,6 +7,7 @@ export default function useWebRTC(callId, isCaller, isVideoCall, callStatus) {
   
   const peerConnection = useRef(null);
   const localStreamRef = useRef(null);
+  const pendingCandidates = useRef([]);
 
   const iceServers = {
     iceServers: [
@@ -110,6 +111,15 @@ export default function useWebRTC(callId, isCaller, isVideoCall, callStatus) {
             if (signal.type === "offer" && !isCaller) {
               console.log("Receiver setting remote SDP offer...");
               await peerConnection.current.setRemoteDescription(new RTCSessionDescription(signal.payload));
+
+              while (pendingCandidates.current.length > 0) {
+
+  const candidate = pendingCandidates.current.shift();
+
+  await peerConnection.current.addIceCandidate(
+    new RTCIceCandidate(candidate)
+  );
+}
               
               const answer = await peerConnection.current.createAnswer();
               await peerConnection.current.setLocalDescription(answer);
@@ -123,10 +133,32 @@ export default function useWebRTC(callId, isCaller, isVideoCall, callStatus) {
             } else if (signal.type === "answer" && isCaller) {
               console.log("Caller applying remote SDP answer...");
               await peerConnection.current.setRemoteDescription(new RTCSessionDescription(signal.payload));
-            } else if (signal.type === "candidate") {
-              console.log("Adding trickle ICE candidate...");
-              await peerConnection.current.addIceCandidate(new RTCIceCandidate(signal.payload));
-            }
+              while (pendingCandidates.current.length > 0) {
+
+  const candidate = pendingCandidates.current.shift();
+
+  await peerConnection.current.addIceCandidate(
+    new RTCIceCandidate(candidate)
+  );
+}
+            } 
+            else if (signal.type === "candidate") {
+
+  if (!peerConnection.current.remoteDescription) {
+
+    console.log("Remote description not ready. Queueing ICE candidate.");
+
+    pendingCandidates.current.push(signal.payload);
+
+    return;
+  }
+
+  console.log("Adding ICE candidate");
+
+  await peerConnection.current.addIceCandidate(
+    new RTCIceCandidate(signal.payload)
+  );
+}
           } catch (err) {
             console.error("Signaling processing error:", err);
           }
