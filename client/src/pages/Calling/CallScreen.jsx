@@ -64,6 +64,7 @@ export default function CallScreen() {
   y: 30,
 });
 
+const [snapSide, setSnapSide] = useState(null);
 const dragRef = useRef(false);
 const dragOffset = useRef({
   x: 0,
@@ -245,7 +246,8 @@ const onDrag = (e) => {
   const previewHeight = window.innerWidth >= 768 ? 224 : 192;
 
   const margin = 10;
-  const bottomReservedSpace = 140;
+  const bottomReservedSpace =
+  window.innerWidth < 768 ? 180 : 140;
 
   const minX = margin;
   const maxX = window.innerWidth - previewWidth - margin;
@@ -270,6 +272,26 @@ const onDrag = (e) => {
 
 const stopDrag = () => {
   dragRef.current = false;
+
+  const previewWidth = window.innerWidth >= 768 ? 160 : 128;
+
+  let x = previewPosition.x;
+  let side = null;
+
+  if (x < window.innerWidth / 2) {
+    x = 10;
+    side = "left";
+  } else {
+    x = window.innerWidth - previewWidth - 10;
+    side = "right";
+  }
+
+  setSnapSide(side);
+
+  setPreviewPosition((prev) => ({
+    ...prev,
+    x,
+  }));
 };
 
   const minutes = String(Math.floor(duration / 60)).padStart(2, "0");
@@ -314,8 +336,17 @@ const stopDrag = () => {
     touchAction: "none",
     WebkitUserSelect: "none",
   }}
-  className="absolute z-20 w-32 h-48 md:w-40 md:h-56 rounded-2xl overflow-hidden border-2 border-zinc-800 shadow-2xl bg-zinc-900"
-
+  className="absolute z-20
+w-32 h-48
+md:w-40 md:h-56
+rounded-2xl
+overflow-hidden
+border-2
+border-zinc-800
+shadow-2xl
+bg-zinc-900
+transition-all
+duration-300"
   onMouseDown={startDrag}
   onMouseMove={onDrag}
   onMouseUp={stopDrag}
