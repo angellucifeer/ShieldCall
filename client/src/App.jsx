@@ -6,7 +6,7 @@ import Home from "./pages/Dashboard/Home";
 import Profile from "./pages/Profile/Profile";
 import CallScreen from "./pages/Calling/CallScreen";
 import Settings from "./pages/Settings/Settings";
-import Chat from "./pages/Chat/Chat";
+import Chat from "./pages/Chat/chat";
 
 import useAuth from "./hooks/useAuth";
 import useCall from "./hooks/useCall";
