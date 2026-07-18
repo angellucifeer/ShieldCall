@@ -69,7 +69,17 @@ export default function CallScreen() {
 
   const audio = audioPlaybackRef.current;
 
-  audio.srcObject = remoteStream;
+  console.log(
+  "Remote Stream Audio:",
+  remoteStream.getAudioTracks()
+);
+
+console.log(
+  "Remote Stream Video:",
+  remoteStream.getVideoTracks()
+);
+
+audio.srcObject = remoteStream;
   audio.muted = false;
   audio.volume = 1.0;
 

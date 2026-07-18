@@ -58,8 +58,15 @@ export default function useWebRTC(callId, isCaller, isVideoCall, callStatus) {
 
         // 2. Add local tracks to the connection frame
         stream.getTracks().forEach((track) => {
-          peerConnection.current.addTrack(track, stream);
-        });
+  console.log(
+    "Sending Track:",
+    track.kind,
+    track.enabled,
+    track.readyState
+  );
+
+  peerConnection.current.addTrack(track, stream);
+});
 
         // 3. Track listener explicitly catches incoming media tracks
         peerConnection.current.ontrack = (event) => {
