@@ -63,17 +63,27 @@ export default function CallScreen() {
   }, [remoteStream, isVideoCall]);
 
   // FIX: Dynamic structural routing block explicitly attaching audio streams to the audio ref element node
-  useEffect(() => {
-    if (audioPlaybackRef.current && remoteStream) {
-      console.log("SUCCESS: Binding remote stream tracks directly into HTMLAudioElement context frame.");
-      audioPlaybackRef.current.srcObject = remoteStream;
-      
-      // Auto-trigger fallback to address strict browser permission structures
-      audioPlaybackRef.current.play().catch(err => {
-        console.warn("Browser audio auto-play policy restriction caught, resolving stream actively:", err);
-      });
+ useEffect(() => {
+  if (!audioPlaybackRef.current) return;
+  if (!remoteStream) return;
+
+  const audio = audioPlaybackRef.current;
+
+  audio.srcObject = remoteStream;
+  audio.muted = false;
+  audio.volume = 1.0;
+
+  const playAudio = async () => {
+    try {
+      await audio.play();
+      console.log("Remote audio playing");
+    } catch (err) {
+      console.error("Audio play failed:", err);
     }
-  }, [remoteStream]);
+  };
+
+  playAudio();
+}, [remoteStream]);
 
   // Handle hardware muting controls
   useEffect(() => {
@@ -272,11 +282,13 @@ export default function CallScreen() {
 
       {/* FIX: Unconditional persistent audio component rendering layout to support both voice and video fallback tracks instantly */}
       <audio
-        ref={audioPlaybackRef}
-        autoPlay
-        playsInline
-        className="hidden absolute w-0 h-0 opacity-0 pointer-events-none appearance-none"
-      />
+  ref={audioPlaybackRef}
+  autoPlay
+  playsInline
+  controls={false}
+  muted={false}
+  className="hidden"
+/>
 
     </div>
   );

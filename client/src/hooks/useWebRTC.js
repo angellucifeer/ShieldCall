@@ -63,11 +63,22 @@ export default function useWebRTC(callId, isCaller, isVideoCall, callStatus) {
 
         // 3. Track listener explicitly catches incoming media tracks
         peerConnection.current.ontrack = (event) => {
-          console.log("CRITICAL: Remote track injected into WebRTC hook:", event.track.kind);
-          if (event.streams && event.streams[0]) {
-            setRemoteStream(event.streams[0]);
-          }
-        };
+  console.log("CRITICAL: Remote track injected:", event.track.kind);
+
+  console.log(
+    "Remote Audio Tracks:",
+    event.streams[0].getAudioTracks()
+  );
+
+  console.log(
+    "Remote Video Tracks:",
+    event.streams[0].getVideoTracks()
+  );
+
+  if (event.streams && event.streams[0]) {
+    setRemoteStream(event.streams[0]);
+  }
+};
 
         // 4. Handle generating ICE candidates
         peerConnection.current.onicecandidate = (event) => {
