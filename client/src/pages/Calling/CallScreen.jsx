@@ -8,41 +8,50 @@ import useWebRTC from "../../hooks/useWebRTC";
 export default function CallScreen() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { call: initialCall, partner: initialPartner, isCaller } = location.state || {};
+  const { call: initialCall, partner: initialPartner, isCaller: initialIsCaller } = location.state || {};
 
   const [currentCall, setCurrentCall] = useState(initialCall);
-  useEffect(() => {
-    if (initialCall) {
-      setCurrentCall(initialCall);
-    }
-  }, [initialCall]);
-
-  const callStatus = currentCall?.status;
-  const isConnected = callStatus === "accepted" || callStatus === "Connected";
-  const isRinging = callStatus === "ringing";
+  const [myId, setMyId] = useState(null);
+  const [partnerProfile, setPartnerProfile] = useState(initialPartner || null);
   
-  const isVideoCall = currentCall?.type === "video" || currentCall?.call_type === "video";
-
   const [duration, setDuration] = useState(0);
   const [micEnabled, setMicEnabled] = useState(true);
-  const [cameraEnabled, setCameraEnabled] = useState(isVideoCall);
-  const [speakerOn, setSpeakerOn] = useState(false); // New state for Loudspeaker
-  const [partnerProfile, setPartnerProfile] = useState(initialPartner || null);
-  const [myId, setMyId] = useState(null);
+  const [cameraEnabled, setCameraEnabled] = useState(false);
+  const [speakerOn, setSpeakerOn] = useState(false);
 
+  // Sync initial state updates cleanly
+  useEffect(() => {
+    if (initialCall) setCurrentCall(initialCall);
+  }, [initialCall]);
+
+  // Fetch current authenticating identity early 
   useEffect(() => {
     async function getCurrentUser() {
       const { data } = await supabase.auth.getUser();
-      setMyId(data.user?.id);
+      if (data?.user) setMyId(data.user.id);
     }
     getCurrentUser();
   }, []);
 
+  const callStatus = currentCall?.status;
+  const isConnected = callStatus === "accepted" || callStatus === "Connected";
+  const isRinging = callStatus === "ringing";
+  const isVideoCall = currentCall?.type === "video" || currentCall?.call_type === "video";
+
+  // Control camera default initialization state based on dynamic call metadata
+  useEffect(() => {
+    setCameraEnabled(isVideoCall);
+  }, [isVideoCall]);
+
+  // Derive caller/receiver states cleanly on every status snapshot update
+  const isActualCaller = initialIsCaller ?? (myId ? currentCall?.caller_id === myId : false);
+  const isIncomingCallPending = !isActualCaller && isRinging;
+
   const { localStream, remoteStream } = useWebRTC(
     currentCall?.id,
-    isCaller,
+    isActualCaller,
     isVideoCall,
-    currentCall?.status
+    callStatus
   );
   
   const localVideoRef = useRef(null);
@@ -63,33 +72,27 @@ export default function CallScreen() {
     }
   }, [remoteStream, isVideoCall]);
 
-  // CRITICAL FIX FOR iPHONE AUDIO: Ensuring early binding, unmuting, and explicit play execution
+  // iOS/Safari Audio Context Binding Fix
   useEffect(() => {
     if (audioPlaybackRef.current && remoteStream) {
       console.log("Binding remote stream tracks to HTMLAudioElement context frame.");
-      
-      // Force volume adjustments and unmuting explicitly for iOS
       audioPlaybackRef.current.muted = false;
       audioPlaybackRef.current.srcObject = remoteStream;
       
-      // Auto-trigger block targeting iOS browser engine constraints
       const playPromise = audioPlaybackRef.current.play();
       if (playPromise !== undefined) {
         playPromise.catch(err => {
-          console.warn("iOS auto-play structure restriction intercepted. Resolving playback natively:", err);
+          console.warn("Mobile auto-play structure restriction intercepted:", err);
         });
       }
     }
   }, [remoteStream]);
 
-  // LOUDSPEAKER ROUTING ENGINE: Toggles sink destinations or mimics speaker gain setups
+  // Loudspeaker toggle routing emulation
   useEffect(() => {
     if (!audioPlaybackRef.current) return;
-
     if (speakerOn) {
-      // Audio element routing adjustments for high-gain outputs (loudspeaker emulation)
       audioPlaybackRef.current.setAttribute("speakerphone", "true");
-      // Standard modern browser sink routing fallback if API support exists
       if (typeof audioPlaybackRef.current.setSinkId === "function") {
         audioPlaybackRef.current.setSinkId("default");
       }
@@ -98,7 +101,7 @@ export default function CallScreen() {
     }
   }, [speakerOn]);
 
-  // Handle hardware muting controls
+  // Hardware control track syncs
   useEffect(() => {
     if (localStream) {
       localStream.getAudioTracks().forEach(track => track.enabled = micEnabled);
@@ -108,19 +111,16 @@ export default function CallScreen() {
   useEffect(() => {
     if (localStream) {
       localStream.getVideoTracks().forEach(track => {
-        track.enabled = isVideoCall && cameraEnabled;
+        track.enabled = cameraEnabled;
       });
     }
-  }, [cameraEnabled, localStream, isVideoCall]);
+  }, [cameraEnabled, localStream]);
 
-  useEffect(() => {
-    setCameraEnabled(isVideoCall);
-  }, [isVideoCall]);
-
+  // Fetch partner profile information cleanly
   useEffect(() => {
     async function fetchPartnerDetails() {
-      if (!currentCall) return;
-      const targetUserId = isCaller ? currentCall.receiver_id : currentCall.caller_id;
+      if (!currentCall || !myId) return;
+      const targetUserId = currentCall.caller_id === myId ? currentCall.receiver_id : currentCall.caller_id;
       if (!targetUserId) return;
 
       try {
@@ -136,23 +136,26 @@ export default function CallScreen() {
       }
     }
 
-    if (!partnerProfile) {
+    if (!partnerProfile && myId) {
       fetchPartnerDetails();
     }
-  }, [currentCall, isCaller, partnerProfile]);
+  }, [currentCall, myId, partnerProfile]);
 
+  // Call duration counter setup
   useEffect(() => {
-    if (!isConnected) return;
+    if (!isConnected || !currentCall?.answered_at) return;
     const answeredAt = new Date(currentCall.answered_at).getTime();
+    
     const updateTimer = () => {
-      const now = Date.now();
-      setDuration(Math.floor((now - answeredAt) / 1000));
+      setDuration(Math.floor((Date.now() - answeredAt) / 1000));
     };
+    
     updateTimer();
     const interval = setInterval(updateTimer, 1000);
     return () => clearInterval(interval);
   }, [isConnected, currentCall?.answered_at]);
 
+  // Supabase Realtime Call Update Channel Subscriber
   useEffect(() => {
     if (!currentCall?.id) return;
     const channel = subscribeCallUpdates(currentCall.id, (updatedCall) => {
@@ -218,12 +221,11 @@ export default function CallScreen() {
   const seconds = String(duration % 60).padStart(2, "0");
   const partnerName = partnerProfile?.display_name || "Partner";
   const avatarLetter = partnerName.charAt(0).toUpperCase();
-  const isIncomingCallPending = currentCall?.receiver_id === myId && currentCall?.status === "ringing";
 
   return (
     <div className="relative h-screen bg-zinc-950 text-white flex flex-col items-center justify-center overflow-hidden">
       
-      {/* 1. Remote Layout Framework */}
+      {/* Remote Video Stream display or Audio avatar backdrop */}
       {isVideoCall && isConnected && remoteStream ? (
         <video
           ref={remoteVideoRef}
@@ -232,14 +234,13 @@ export default function CallScreen() {
           className="absolute inset-0 w-full h-full object-cover z-0"
         />
       ) : (
-        /* Standby Audio UI Backdrop */
         <div className="flex flex-col items-center z-10">
           <div className="w-40 h-40 rounded-full bg-gradient-to-br from-blue-600 to-cyan-500 flex items-center justify-center text-5xl font-bold shadow-xl animate-pulse">
             {avatarLetter}
           </div>
           <h1 className="text-3xl font-bold mt-8 tracking-wide">{partnerName}</h1>
           <p className="text-zinc-400 mt-2 font-medium tracking-wider text-sm bg-zinc-900/50 px-3 py-1 rounded-full border border-zinc-800">
-            {isConnected ? "Connected" : isRinging ? "Calling..." : callStatus}
+            {isConnected ? "Connected" : isIncomingCallPending ? "Incoming Call..." : isRinging ? "Calling..." : callStatus}
           </p>
           {isConnected && (
             <p className="text-xl font-mono mt-4 bg-zinc-900 px-4 py-1.5 rounded-xl border border-zinc-800 text-cyan-400">
@@ -249,7 +250,7 @@ export default function CallScreen() {
         </div>
       )}
 
-      {/* 2. Self View Frame Overlay */}
+      {/* Local Webcam Picture-in-Picture Frame Layer */}
       {isVideoCall && localStream && cameraEnabled && (
         <div className="absolute top-6 right-6 w-32 h-48 md:w-40 md:h-56 rounded-2xl overflow-hidden border-2 border-zinc-800 shadow-2xl z-20 bg-zinc-900">
           <video
@@ -262,10 +263,10 @@ export default function CallScreen() {
         </div>
       )}
 
-      {/* 3. Controls Layout Container */}
+      {/* Control Actions Tray Overlay */}
       <div className="absolute bottom-10 left-1/2 transform -translate-x-1/2 flex items-center gap-4 z-30 bg-zinc-900/40 backdrop-blur-lg px-6 py-4 rounded-3xl border border-zinc-800/50 shadow-2xl">
         
-        {/* Mic Control Button */}
+        {/* Toggle Audio Track Mute Status */}
         <button
           onClick={() => setMicEnabled(!micEnabled)}
           className={`w-14 h-14 rounded-full flex items-center justify-center border transition-all duration-200 ${
@@ -275,30 +276,36 @@ export default function CallScreen() {
           {micEnabled ? <FiMic size={22} /> : <FiMicOff size={22} />}
         </button>
 
-        {/* NEW FEATURE: Dedicated Loudspeaker Toggle for Voice Calls */}
+        {/* Loudspeaker toggle */}
         <button
           onClick={() => setSpeakerOn(!speakerOn)}
           disabled={!isConnected}
           className={`w-14 h-14 rounded-full flex items-center justify-center border transition-all duration-200 ${
             !isConnected ? "opacity-30 cursor-not-allowed" : ""
           } ${
-            speakerOn ? "bg-green-600 border-green-500 text-white animate-pulse" : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:bg-zinc-800"
+            speakerOn ? "bg-green-600 border-green-500 text-white" : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:bg-zinc-800"
           }`}
         >
           {speakerOn ? <FiVolume2 size={22} /> : <FiVolumeX size={22} />}
         </button>
 
-        {/* Central Call Connection Trigger Hooks */}
+        {/* Unified Call Lifecycle Controls */}
         {isIncomingCallPending ? (
           <>
-            <button onClick={handleDecline} className="w-16 h-16 rounded-full bg-red-600 flex items-center justify-center text-white hover:bg-red-700 shadow-lg"><FiPhoneOff size={26} /></button>
-            <button onClick={handleAccept} className="w-16 h-16 rounded-full bg-green-600 flex items-center justify-center text-white hover:bg-green-700 shadow-lg"><FiPhone size={26} /></button>
+            <button onClick={handleDecline} className="w-16 h-16 rounded-full bg-red-600 flex items-center justify-center text-white hover:bg-red-700 shadow-lg">
+              <FiPhoneOff size={26} />
+            </button>
+            <button onClick={handleAccept} className="w-16 h-16 rounded-full bg-green-600 flex items-center justify-center text-white hover:bg-green-700 shadow-lg">
+              <FiPhone size={26} />
+            </button>
           </>
         ) : (
-          <button onClick={handleEndCall} className="w-16 h-16 rounded-full bg-red-600 flex items-center justify-center text-white hover:bg-red-700 shadow-lg"><FiPhoneOff size={26} /></button>
+          <button onClick={handleEndCall} className="w-16 h-16 rounded-full bg-red-600 flex items-center justify-center text-white hover:bg-red-700 shadow-lg">
+            <FiPhoneOff size={26} />
+          </button>
         )}
 
-        {/* Video Mode Stream Toggle */}
+        {/* Toggle Video Stream View mode */}
         <button
           onClick={toggleCallType}
           disabled={!isConnected}
@@ -310,15 +317,13 @@ export default function CallScreen() {
         </button>
       </div>
 
-      {/* FIXED AUDIO INJECTION FOR iOS: Added playsInline, explicit control flags, and forced unmuting */}
+      {/* Hidden iOS Audio Stream Context Holder */}
       <audio
         ref={audioPlaybackRef}
         autoPlay
         playsInline
-        controls={false}
-        className="hidden absolute w-0 h-0 opacity-0 pointer-events-none appearance-none"
+        style={{ display: "none", width: 0, height: 0, opacity: 0 }}
       />
-
     </div>
   );
 }

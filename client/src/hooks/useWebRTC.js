@@ -41,9 +41,13 @@ export default function useWebRTC(callId, isCaller, isVideoCall, callStatus) {
           return;
         }
 
-        // 1. Capture hardware media tracks cleanly
+        // 1. Capture hardware tracks cleanly with iOS Audio constraints
         const stream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          },
           video: isVideoCall,
         });
 
@@ -59,34 +63,28 @@ export default function useWebRTC(callId, isCaller, isVideoCall, callStatus) {
 
         // 2. Add local tracks to the connection frame
         stream.getTracks().forEach((track) => {
-  console.log(
-    "Sending Track:",
-    track.kind,
-    track.enabled,
-    track.readyState
-  );
+          console.log("Sending Track:", track.kind, track.enabled, track.readyState);
+          peerConnection.current.addTrack(track, stream);
+        });
 
-  peerConnection.current.addTrack(track, stream);
-});
-
-        // 3. Track listener explicitly catches incoming media tracks
+        // 3. Track listener explicitly catches incoming media tracks (iOS Optimized)
         peerConnection.current.ontrack = (event) => {
-  console.log("CRITICAL: Remote track injected:", event.track.kind);
+          console.log("CRITICAL: Remote track injected:", event.track.kind);
 
-  console.log(
-    "Remote Audio Tracks:",
-    event.streams[0].getAudioTracks()
-  );
+          if (event.streams && event.streams[0]) {
+            setRemoteStream(event.streams[0]);
+          } else {
+            // Fallback for Safari if streams container array is evaluated as empty
+            console.log("Constructing standalone media stream container fallback for iOS Safari");
+            const fallbackStream = new MediaStream([event.track]);
+            setRemoteStream(fallbackStream);
+          }
+        };
 
-  console.log(
-    "Remote Video Tracks:",
-    event.streams[0].getVideoTracks()
-  );
-
-  if (event.streams && event.streams[0]) {
-    setRemoteStream(event.streams[0]);
-  }
-};
+        // iOS Optimization: Force state re-evaluation on track mutation events
+        peerConnection.current.onremovetrack = () => {
+          console.log("Remote track removal sequence processed.");
+        };
 
         // 4. Handle generating ICE candidates
         peerConnection.current.onicecandidate = (event) => {
@@ -113,13 +111,9 @@ export default function useWebRTC(callId, isCaller, isVideoCall, callStatus) {
               await peerConnection.current.setRemoteDescription(new RTCSessionDescription(signal.payload));
 
               while (pendingCandidates.current.length > 0) {
-
-  const candidate = pendingCandidates.current.shift();
-
-  await peerConnection.current.addIceCandidate(
-    new RTCIceCandidate(candidate)
-  );
-}
+                const candidate = pendingCandidates.current.shift();
+                await peerConnection.current.addIceCandidate(new RTCIceCandidate(candidate));
+              }
               
               const answer = await peerConnection.current.createAnswer();
               await peerConnection.current.setLocalDescription(answer);
@@ -134,37 +128,26 @@ export default function useWebRTC(callId, isCaller, isVideoCall, callStatus) {
               console.log("Caller applying remote SDP answer...");
               await peerConnection.current.setRemoteDescription(new RTCSessionDescription(signal.payload));
               while (pendingCandidates.current.length > 0) {
-
-  const candidate = pendingCandidates.current.shift();
-
-  await peerConnection.current.addIceCandidate(
-    new RTCIceCandidate(candidate)
-  );
-}
+                const candidate = pendingCandidates.current.shift();
+                await peerConnection.current.addIceCandidate(new RTCIceCandidate(candidate));
+              }
             } 
             else if (signal.type === "candidate") {
+              if (!peerConnection.current.remoteDescription) {
+                console.log("Remote description not ready. Queueing ICE candidate.");
+                pendingCandidates.current.push(signal.payload);
+                return;
+              }
 
-  if (!peerConnection.current.remoteDescription) {
-
-    console.log("Remote description not ready. Queueing ICE candidate.");
-
-    pendingCandidates.current.push(signal.payload);
-
-    return;
-  }
-
-  console.log("Adding ICE candidate");
-
-  await peerConnection.current.addIceCandidate(
-    new RTCIceCandidate(signal.payload)
-  );
-}
+              console.log("Adding ICE candidate");
+              await peerConnection.current.addIceCandidate(new RTCIceCandidate(signal.payload));
+            }
           } catch (err) {
             console.error("Signaling processing error:", err);
           }
         }
 
-        // FIX: Start listening BEFORE pushing offers/answers to eliminate the candidate race condition
+        // Listen for updates in call_signals
         channel = supabase
           .channel(`signaling:${callId}`)
           .on(
@@ -179,7 +162,6 @@ export default function useWebRTC(callId, isCaller, isVideoCall, callStatus) {
             if (status === "SUBSCRIBED") {
               console.log("Signaling channel ready. Commencing SDP generation.");
               
-              // If Caller, initialize the initial SDP offer inside the safe channel subscription scope
               if (isCaller) {
                 const offer = await peerConnection.current.createOffer();
                 await peerConnection.current.setLocalDescription(offer);
@@ -192,7 +174,6 @@ export default function useWebRTC(callId, isCaller, isVideoCall, callStatus) {
                 });
               }
 
-              // Fetch any missed historical rows safely
               const { data: historicalSignals } = await supabase
                 .from("call_signals")
                 .select("*")
