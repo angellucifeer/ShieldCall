@@ -74,32 +74,27 @@ export default function CallScreen() {
 
   // iOS/Safari Audio Context Binding Fix
   useEffect(() => {
-    if (audioPlaybackRef.current && remoteStream) {
-      console.log("Binding remote stream tracks to HTMLAudioElement context frame.");
-      audioPlaybackRef.current.muted = false;
-      audioPlaybackRef.current.srcObject = remoteStream;
-      
-      const playPromise = audioPlaybackRef.current.play();
-      if (playPromise !== undefined) {
-        playPromise.catch(err => {
-          console.warn("Mobile auto-play structure restriction intercepted:", err);
-        });
-      }
-    }
-  }, [remoteStream]);
+  if (!audioPlaybackRef.current) return;
+  if (!remoteStream) return;
 
-  // Loudspeaker toggle routing emulation
-  useEffect(() => {
-    if (!audioPlaybackRef.current) return;
-    if (speakerOn) {
-      audioPlaybackRef.current.setAttribute("speakerphone", "true");
-      if (typeof audioPlaybackRef.current.setSinkId === "function") {
-        audioPlaybackRef.current.setSinkId("default");
-      }
-    } else {
-      audioPlaybackRef.current.removeAttribute("speakerphone");
+  const audio = audioPlaybackRef.current;
+
+  audio.srcObject = remoteStream;
+  audio.autoplay = true;
+  audio.muted = false;
+  audio.volume = 1.0;
+
+  const playAudio = async () => {
+    try {
+      await audio.play();
+      console.log("Remote audio started");
+    } catch (err) {
+      console.error("Audio play failed", err);
     }
-  }, [speakerOn]);
+  };
+
+  playAudio();
+}, [remoteStream]);
 
   // Hardware control track syncs
   useEffect(() => {
@@ -326,7 +321,12 @@ export default function CallScreen() {
   controls={false}
   muted={false}
   preload="auto"
-  style={{ display: "block", width: "1px", height: "1px", opacity: 0, pointerEvents: "none" }}
+  style={{
+  position: "absolute",
+  width: 0,
+  height: 0,
+  opacity: 0
+}}
 />
     </div>
   );

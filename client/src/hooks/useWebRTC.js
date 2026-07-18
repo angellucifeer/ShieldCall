@@ -44,10 +44,12 @@ export default function useWebRTC(callId, isCaller, isVideoCall, callStatus) {
         // 1. Capture hardware tracks cleanly with iOS Audio constraints
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true
-          },
+  echoCancellation: true,
+  noiseSuppression: false,
+  autoGainControl: false,
+  channelCount: 2,
+  latency: 0,
+},
           video: isVideoCall,
         });
 
