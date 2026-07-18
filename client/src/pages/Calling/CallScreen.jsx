@@ -335,6 +335,7 @@ const stopDrag = () => {
     left: previewPosition.x,
     top: previewPosition.y,
     transition: "transform .25s ease",
+    WebkitTouchCallout: "none",
     touchAction: "none",
     userSelect: "none",
     WebkitUserSelect: "none",
@@ -354,15 +355,9 @@ duration-300"
   onMouseMove={onDrag}
   onMouseUp={stopDrag}
 
-  onTouchStart={(e) => {
-  e.preventDefault();
-  startDrag(e);
-}}
-
-onTouchMove={(e) => {
-  e.preventDefault();
-  onDrag(e);
-}}
+  onTouchStart={startDrag}
+onTouchMove={onDrag}
+onTouchEnd={stopDrag}
 
 onTouchEnd={stopDrag}
 >
